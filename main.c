@@ -29,6 +29,7 @@
 
 int handler_powerstate(struct mp_handle_t *d, int action, int argc, char **argv);
 int handler_list(struct mp_handle_t *d, int action, int argc, char **argv);
+int handler_eeprom(struct mp_handle_t *d, int action, int argc, char **argv);
 
 typedef struct action_t {
     char *action;
@@ -37,14 +38,18 @@ typedef struct action_t {
     int (*handler)(struct mp_handle_t *,int, int,  char**);
 } ACTION;
 
-#define ACTION_LIST       0
-#define ACTION_POWERON    1
-#define ACTION_POWEROFF   2
+#define ACTION_LIST         0
+#define ACTION_POWERON      1
+#define ACTION_POWEROFF     2
+#define ACTION_READ_EEPROM  3
+#define ACTION_WRITE_EEPROM 4
 
 ACTION action_list[] = {
-    { "list",       BOARD_TYPE_ANY,   0, handler_list },
-    { "poweron",    BOARD_TYPE_POWER, 1, handler_powerstate },
-    { "poweroff",   BOARD_TYPE_POWER, 1, handler_powerstate },
+    { "list",        BOARD_TYPE_ANY,   0, handler_list },
+    { "poweron",     BOARD_TYPE_POWER, 1, handler_powerstate },
+    { "poweroff",    BOARD_TYPE_POWER, 1, handler_powerstate },
+    { "readeeprom",  BOARD_TYPE_ANY,   1, handler_eeprom },
+    { "writeeeprom", BOARD_TYPE_ANY,   1, handler_eeprom },
     { NULL, 0 }
 };
 
@@ -62,6 +67,25 @@ int get_action(char *action) {
     }
 
     return -1;
+}
+
+int handler_eeprom(struct mp_handle_t *d, int action, int argc, char **argv) {
+    unsigned char result;
+
+    switch(action) {
+    case ACTION_READ_EEPROM:
+        if(mp_read_eeprom(d, atoi(argv[0]), &result)) {
+            printf("EEProm value at 0x%02x: 0x%02x\n",atoi(argv[0]),result);
+            return TRUE;
+        }
+        return FALSE;
+    case ACTION_WRITE_EEPROM:
+        return mp_write_eeprom(d, atoi(argv[0]), atoi(argv[1]));
+    default:
+        break;
+    }
+
+    return FALSE;
 }
 
 int handler_powerstate(struct mp_handle_t *d, int action, int argc, char **argv) {
@@ -82,9 +106,11 @@ void show_usage(void) {
     printf("mpusb: Software for Monkey Puppet Labs USB controller\n");
     printf("usage: mpusb [-s <serial>] <action>\n\n");
     printf("actions:\n");
-    printf("  list        list all attached mpl boards\n");
-    printf("  poweron     power on a power board\n");
-    printf("  poweroff    power off a power board\n");
+    printf("  list                       list all attached mpl boards\n");
+    printf("  poweron                    power on a power board\n");
+    printf("  poweroff                   power off a power board\n");
+    printf("  readeeprom <addr>          read eeprom value at address <addr>\n");
+    printf("  writeeprom <addr> <value>  write value <value> at eeprom address <addr>\n");
     exit(1);
 }
 
@@ -140,7 +166,8 @@ int main(int argc, char *argv[]) {
     } else {
         usbdev = mp_open(action_list[action].required_type, id);
         if(!usbdev) {
-            printf("Could not find board of type %s with serial %04d %s\n",
+            printf("Could not find board of type %d (%s) with serial %04d %s\n",
+                   action_list[action].required_type,
                    board_type[action_list[action].required_type],
                    id, id == BOARD_SERIAL_ANY ? "(ANY)" : "");
             exit(-1);

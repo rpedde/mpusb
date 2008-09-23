@@ -1,4 +1,3 @@
-
 /*
  * This file is based on fsusb_picdem
  *
@@ -35,15 +34,17 @@
 #include "mpusb.h"
 
 #define CMD_READ_VERSION   0x00
+#define CMD_READ_EEPROM    0x01
+#define CMD_WRITE_EEPROM   0x02
 #define CMD_BOARD_TYPE     0x30
 #define CMD_BD_POWER_INFO  0x31
 #define CMD_BD_POWER_STATE 0x32
 #define CMD_RESET          0xFF
 
 char *board_type[] = {
-    "Any",
+    "ANY",
     "Power Controller",
-    "Generic IO",
+    "Generic I2C",
     "Neo-Geo interface"
 };
 
@@ -87,12 +88,12 @@ int mp_recv_usb(struct mp_handle_t *d, int len, char *dest) {
 
     debug_printf("read %i bytes\n", r);
     for(index = 0; index < r; index++) {
-        debug_printf("0x%02x ",dest[index]);
+        debug_printf("0x%02x ",(unsigned char)dest[index]);
     }
     debug_printf("\n");
 
     if (r!=len) {
-        perror("usb_bulk_read");
+        fprintf(stderr,"Expecting to read %d bytes -- read %d\n",len, r);
         return FALSE;
     }
     return TRUE;
@@ -114,11 +115,62 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
     debug_printf("\n");
 
     if(r != len) {
-        perror("usb_bulk_write");
+        fprintf(stderr,"Wanted to write %d bytes -- wrote %d\n",len, r);
         return FALSE;
     }
 
     return TRUE;
+}
+
+
+/*
+ * read eeprom
+ */
+int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *retval) {
+    char buf[3];
+    int result;
+
+    if(!d->has_eeprom)
+        return FALSE;
+
+    buf[0] = CMD_READ_EEPROM;
+    buf[1] = 1;
+    buf[2] = addr;
+
+    debug_printf("executing mp_read_eeprom: %d\n", addr);
+
+    if(mp_write_usb(d,3,buf)) {
+        result = mp_recv_usb(d, 2, buf);
+        if(result)
+            *retval = buf[0];
+        return result;
+    }
+
+    return FALSE;
+}
+
+/*
+ * write eeprom
+ */
+int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char value) {
+    char buf[4];
+
+    if(!d->has_eeprom)
+        return FALSE;
+
+    buf[0] = CMD_WRITE_EEPROM;
+    buf[1] = 2;
+    buf[2] = addr;
+    buf[3] = value;
+
+    debug_printf("executing mp_write_eeprom: addr %d -> %d\n", addr, value);
+
+    if(mp_write_usb(d,4,buf)) {
+        if(mp_recv_usb(d, 4, buf))
+            return (buf[0] != 0);
+    }
+
+    return FALSE;
 }
 
 
@@ -165,6 +217,10 @@ int mp_query_info(struct mp_handle_t *d) {
     d->serial = (int) buf[1];
     d->processor_type = (int) buf[2];
     d->processor_speed = (int) buf[3];
+
+    d->has_eeprom = 0;
+    if(d->processor_type == PROCESSOR_TYPE_2550)
+        d->has_eeprom = 1;
 
     // Get board specific info
     debug_printf("Getting board specific info\n");
@@ -322,8 +378,8 @@ struct mp_handle_t *mp_open(int type, int id) {
         for(device=usb_devices;device!=NULL;device=device->next) {
             pmp = mp_create_handle(device);
             if(pmp) {
-                if((pmp->board_type == type) && ((id == BOARD_SERIAL_ANY) ||
-                                                 (id == pmp->serial))) {
+                if(((pmp->board_type == type) || (type == BOARD_TYPE_ANY)) &&
+                   ((id == BOARD_SERIAL_ANY) || (id == pmp->serial))) {
                     return pmp;
                 }
 

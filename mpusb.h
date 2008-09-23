@@ -21,6 +21,8 @@
 #ifndef __MPUSB_H__
 #define __MPUSB_H__
 
+#include <stdint.h>
+
 struct mp_handle_t {
     struct usb_dev_handle *phandle;
 
@@ -44,7 +46,7 @@ struct mp_handle_t {
 
 #define BOARD_TYPE_ANY       0x00
 #define BOARD_TYPE_POWER     0x01
-#define BOARD_TYPE_GENIO     0x02
+#define BOARD_TYPE_I2C       0x02
 #define BOARD_TYPE_NEOGEO    0x03
 
 #define BOARD_SERIAL_ANY     0x00
@@ -62,5 +64,8 @@ extern int mp_list(void);
 /* Power functions */
 extern int mp_power_set(struct mp_handle_t *d, int state);
 
+/* EEProm functions */
+extern int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *retval);
+extern int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char value);
 
 #endif /* __MPUSB_H__ */
