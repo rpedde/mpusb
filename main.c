@@ -30,6 +30,7 @@
 int handler_powerstate(struct mp_handle_t *d, int action, int argc, char **argv);
 int handler_list(struct mp_handle_t *d, int action, int argc, char **argv);
 int handler_eeprom(struct mp_handle_t *d, int action, int argc, char **argv);
+int handler_i2c(struct mp_handle_t *d, int action, int argc, char **argv);
 
 typedef struct action_t {
     char *action;
@@ -43,6 +44,8 @@ typedef struct action_t {
 #define ACTION_POWEROFF     2
 #define ACTION_READ_EEPROM  3
 #define ACTION_WRITE_EEPROM 4
+#define ACTION_READ_I2C     5
+#define ACTION_WRITE_I2C    6
 
 ACTION action_list[] = {
     { "list",        BOARD_TYPE_ANY,   0, handler_list },
@@ -50,6 +53,8 @@ ACTION action_list[] = {
     { "poweroff",    BOARD_TYPE_POWER, 1, handler_powerstate },
     { "readeeprom",  BOARD_TYPE_ANY,   1, handler_eeprom },
     { "writeeeprom", BOARD_TYPE_ANY,   1, handler_eeprom },
+    { "readi2c",     BOARD_TYPE_I2C,   1, handler_i2c },
+    { "writei2c",    BOARD_TYPE_I2C,   1, handler_i2c },
     { NULL, 0 }
 };
 
@@ -88,6 +93,31 @@ int handler_eeprom(struct mp_handle_t *d, int action, int argc, char **argv) {
     return FALSE;
 }
 
+int handler_i2c(struct mp_handle_t *d, int action, int argc, char **argv) {
+    unsigned char buffer[256];
+    unsigned char len, device, addr;
+
+    device = atoi(argv[0]);
+    addr = atoi(argv[1]);
+
+    switch(action) {
+    case ACTION_READ_I2C:
+        len = atoi(argv[2]);
+
+        if(mp_i2c_read(d, device, addr, len, &buffer[0])) {
+            printf("success\n");
+        } else {
+            printf("Failure\n");
+        }
+
+        break;
+    default:
+        break;
+    }
+
+    return FALSE;
+}
+
 int handler_powerstate(struct mp_handle_t *d, int action, int argc, char **argv) {
     int result;
 
@@ -111,6 +141,7 @@ void show_usage(void) {
     printf("  poweroff                   power off a power board\n");
     printf("  readeeprom <addr>          read eeprom value at address <addr>\n");
     printf("  writeeprom <addr> <value>  write value <value> at eeprom address <addr>\n");
+    printf("  readi2c <dev> <addr> <len> read <len> bytes from device <dev>, addr <addr>\n");
     exit(1);
 }
 

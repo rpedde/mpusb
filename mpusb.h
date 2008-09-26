@@ -68,4 +68,8 @@ extern int mp_power_set(struct mp_handle_t *d, int state);
 extern int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *retval);
 extern int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char value);
 
+/* i2c functions */
+extern int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
+extern int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
+
 #endif /* __MPUSB_H__ */

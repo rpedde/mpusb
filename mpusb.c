@@ -39,6 +39,8 @@
 #define CMD_BOARD_TYPE     0x30
 #define CMD_BD_POWER_INFO  0x31
 #define CMD_BD_POWER_STATE 0x32
+#define CMD_I2C_READ       0x40
+#define CMD_I2C_WRITE      0x41
 #define CMD_RESET          0xFF
 
 char *board_type[] = {
@@ -69,6 +71,11 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src);
 int mp_query_info(struct mp_handle_t *d);
 struct mp_handle_t *mp_create_handle(struct usb_device *handle);
 void mp_destroy_handle(struct mp_handle_t *ph);
+int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *retval);
+int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char value);
+int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
+int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
+
 
 #ifdef DEBUG
 # define debug_printf(args...) fprintf(stderr, args)
@@ -120,6 +127,87 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
     }
 
     return TRUE;
+}
+
+
+/*
+ * read from i2c device
+ */
+int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data) {
+    char *buf;
+    int result = FALSE;
+    int retval;
+
+    if(d->board_type != BOARD_TYPE_I2C) {
+        return FALSE;
+    }
+
+    buf = malloc(len + 5); // make sure we have enough for the headers
+    if(!buf) {
+        perror("malloc");
+        return FALSE;
+    }
+
+    buf[0] = CMD_I2C_READ;
+    buf[1] = 2;
+    buf[2] = dev;
+    buf[3] = addr;
+    buf[4] = len;
+
+    debug_printf("executing mp_i2c_read: dev 0x%02x, addr 0x%02x, len 0x%02x\n", dev, addr, len);
+
+    if(mp_write_usb(d,5,buf)) {
+        result = mp_recv_usb(d, len + 1, buf);
+        if(result) {
+            retval = buf[0];
+            memcpy(data,&buf[1],len);
+            free(buf);
+            return retval;
+        }
+    }
+
+    free(buf);
+    return result;
+}
+
+/*
+ * write to an i2c device
+ */
+int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data) {
+    char *buf;
+    int result = FALSE;
+    int retval;
+
+    if(d->board_type != BOARD_TYPE_I2C) {
+        return FALSE;
+    }
+
+    buf = malloc(len + 5); // make sure we have enough for the headers
+    if(!buf) {
+        perror("malloc");
+        return FALSE;
+    }
+
+    buf[0] = CMD_I2C_WRITE;
+    buf[1] = 2 + len;
+    buf[2] = dev;
+    buf[3] = addr;
+
+    memcpy(&buf[4],data,len);
+
+    debug_printf("executing mp_i2c_write: dev 0x%02x, addr 0x%02x, len 0x%02x\n", dev, addr, len);
+
+    if(mp_write_usb(d,4+len,buf)) {
+        result = mp_recv_usb(d, 1, buf);
+        if(result) {
+            retval = buf[0];
+            free(buf);
+            return retval;
+        }
+    }
+
+    free(buf);
+    return result;
 }
 
 
