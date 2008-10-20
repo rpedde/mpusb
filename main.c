@@ -58,6 +58,21 @@ ACTION action_list[] = {
     { NULL, 0 }
 };
 
+#define I2C_E_SUCCESS 0
+#define I2C_E_NODEV   1
+#define I2C_E_NOACK   2
+#define I2C_E_TIMEOUT 3
+#define I2C_E_OTHER   4
+#define I2C_E_LAST    5
+
+char *i2c_errors[] = {
+    "Success",
+    "Invalid device",
+    "Protocol error.  Missing ACK",
+    "Timeout",
+    "Unknown"
+};
+
 
 int get_action(char *action) {
     ACTION *pcurrent;
@@ -96,6 +111,8 @@ int handler_eeprom(struct mp_handle_t *d, int action, int argc, char **argv) {
 int handler_i2c(struct mp_handle_t *d, int action, int argc, char **argv) {
     unsigned char buffer[256];
     unsigned char len, device, addr;
+    int result;
+    int index;
 
     device = atoi(argv[0]);
     addr = atoi(argv[1]);
@@ -104,10 +121,21 @@ int handler_i2c(struct mp_handle_t *d, int action, int argc, char **argv) {
     case ACTION_READ_I2C:
         len = atoi(argv[2]);
 
-        if(mp_i2c_read(d, device, addr, len, &buffer[0])) {
-            printf("success\n");
+        if((result=mp_i2c_read(d, device, addr, len, &buffer[0]))) {
+            printf("Read byte(s): ");
+            for (index = 0; index < len; index++) {
+                printf("0x%02x ", buffer[index]);
+            }
+
+            printf("\n");
+            return TRUE;
         } else {
-            printf("Failure\n");
+            if(buffer[0] < I2C_E_LAST) {
+                printf("Error 0x%02x: %s\n",buffer[0],i2c_errors[buffer[0]]);
+            } else {
+                printf("I2C Error 0x%02x\n",buffer[0]);
+                return FALSE;
+            }
         }
 
         break;

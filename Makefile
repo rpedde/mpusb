@@ -20,7 +20,7 @@ LIBUSB=/sw
 OPTS=-Wall -D_GNU_SOURCE
 OBJS=mpusb.o
 
-CFLAGS=$(OPTS) -I$(LIBUSB)/include -DDEBUG
+CFLAGS=$(OPTS) -I$(LIBUSB)/include #-DDEBUG
 LDFLAGS=-L$(LIBUSB)/lib -lusb
 
 # Needed for static linking under OS X:
