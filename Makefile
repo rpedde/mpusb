@@ -21,10 +21,10 @@ OPTS=-Wall -D_GNU_SOURCE
 OBJS=mpusb.o
 
 CFLAGS=$(OPTS) -I$(LIBUSB)/include #-DDEBUG
-LDFLAGS=-L$(LIBUSB)/lib -lusb
+LDFLAGS=-L$(LIBUSB)/lib -lusb -lreadline
 
 # Needed for static linking under OS X:
-LDFLAGS=-L$(LIBUSB)/lib -lusb -lIOKit -framework CoreFoundation
+LDFLAGS=-L$(LIBUSB)/lib -lusb -lIOKit -framework CoreFoundation -lreadline
 
 all: mpusb
 

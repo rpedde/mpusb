@@ -65,6 +65,7 @@ const static int mp_endpoint_in=1;
 const static int mp_endpoint_out=1;
 const static int mp_timeout=1000; /* timeout in ms */
 
+
 /* Forwards */
 int mp_recv_usb(struct mp_handle_t *d,int len, char *dest);
 int mp_write_usb(struct mp_handle_t *d, int len, char *src);
@@ -101,6 +102,7 @@ int mp_recv_usb(struct mp_handle_t *d, int len, char *dest) {
 
     if (r!=len) {
         fprintf(stderr,"Expecting to read %d bytes -- read %d\n",len, r);
+        fprintf(stderr,"%s",usb_strerror());
         return FALSE;
     }
     return TRUE;
@@ -123,6 +125,7 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
 
     if(r != len) {
         fprintf(stderr,"Wanted to write %d bytes -- wrote %d\n",len, r);
+        fprintf(stderr,"%s",usb_strerror());
         return FALSE;
     }
 
@@ -339,16 +342,19 @@ struct mp_handle_t *mp_create_handle(struct usb_device *device) {
     }
 
     phandle = usb_open(device);
-    if(!phandle)
+    if(!phandle) {
+        debug_printf("Error in usb_open\n");
         return NULL;
+    }
 
-    if(usb_set_configuration(phandle, mp_configuration)) {
+    if(usb_set_configuration(phandle, mp_configuration) < 0) {
+        debug_printf("Error in set_configuration\n");
         usb_close(phandle);
         return NULL;
     }
 
-
-    if (usb_claim_interface(phandle, mp_interface)) {
+    if (usb_claim_interface(phandle, mp_interface) < 0) {
+        debug_printf("Error in claim_interface\n");
         usb_close(phandle);
         return NULL;
     }
@@ -374,11 +380,11 @@ struct mp_handle_t *mp_create_handle(struct usb_device *device) {
  * destroy a previously allocated mp handle
  */
 void mp_destroy_handle(struct mp_handle_t *ph) {
+    usb_reset(ph->phandle);
     usb_release_interface(ph->phandle, mp_interface);
     usb_close(ph->phandle);
     free(ph);
 }
-
 
 /*
  * list all USB devices
@@ -390,16 +396,19 @@ int mp_list(void) {
     struct mp_handle_t *pmp;
 
     usb_init();
+
     usb_find_busses();
     usb_find_devices();
 
     for (bus=usb_get_busses();bus!=NULL;bus=bus->next) {
         struct usb_device* usb_devices = bus->devices;
+        debug_printf("Checking bus %s\n",bus->dirname);
         for(device=usb_devices;device!=NULL;device=device->next) {
+            debug_printf("Checking device %s\n",device->filename);
             pmp = mp_create_handle(device);
             if(pmp) {
                 if(!found) {
-                    printf("Bus  Serial   Firmware     Proc   Mhz EEPROM  Type\n");
+                    printf("\nBus  Serial   Firmware     Proc   Mhz EEPROM  Type\n");
                     printf("----------------------------------------------"
                            "-----------------\n");
                     found = 1;
@@ -432,6 +441,10 @@ int mp_list(void) {
     return TRUE;
 }
 
+void mp_close(struct mp_handle_t *d) {
+    mp_destroy_handle(d);
+}
+
 /* Find the first USB device with this vendor and product.
  *  Exits on errors, like if the device couldn't be found. -osl
  *
@@ -453,8 +466,8 @@ struct mp_handle_t *mp_open(int type, int id) {
     usb_debug=4;
 #endif
 
-    printf("Locating Monkey Puppet Labs USB device (vendor 0x%04x/product 0x%04x)\n",
-           mp_vendorID,mp_productID);
+    //    printf("Locating Monkey Puppet Labs USB device (vendor 0x%04x/product 0x%04x)\n",
+    //           mp_vendorID,mp_productID);
 
     /* (libusb setup code stolen from John Fremlin's cool "usb-robot") -osl */
     usb_init();

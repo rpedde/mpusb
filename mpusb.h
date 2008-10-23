@@ -59,6 +59,7 @@ extern char *processor_type[];
 
 /* External Functions */
 extern struct mp_handle_t *mp_open(int type, int id);
+extern void mp_close(struct mp_handle_t *d);
 extern int mp_list(void);
 
 /* Power functions */
