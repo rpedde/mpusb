@@ -138,7 +138,9 @@ void usage_eeprom(void) {
 
 void usage_i2c(void) {
     printf("i2c read <device> <addr> <len>\n");
-    printf(" read <len> bytes from address <addr> of i2c device <device>\n\n");
+    printf(" read <len> bytes from address <addr> of i2c device <device>\n");
+    printf("i2c write <device> <addr> <byte> [<byte> ... ]\n");
+    printf(" write the specified bytes to i2c device <device> at addr <addr>\n\n");
     printf("Note: <addr> is the pre-shifted address\n\n");
 }
 
@@ -210,14 +212,15 @@ int handler_eeprom(struct mp_handle_t *d, int action, int argc, char **argv) {
 }
 
 int handler_i2c(struct mp_handle_t *d, int action, int argc, char **argv) {
-    unsigned char buffer[256];
+    unsigned char buffer[64];
     unsigned char len, device, addr;
     int result;
     int index;
+    unsigned int tempint;
 
-    if(argc < 4) {
+    if((argc < 4) || (argc > 64)) {
         action_list[action].usage();
-        exit(1);
+        return FALSE;
     }
 
     device = atoi(argv[1]);
@@ -239,9 +242,38 @@ int handler_i2c(struct mp_handle_t *d, int action, int argc, char **argv) {
                 printf("Error 0x%02x: %s\n",buffer[0],i2c_errors[buffer[0]]);
             } else {
                 printf("I2C Error 0x%02x\n",buffer[0]);
-                return FALSE;
             }
         }
+    } else if(strcasecmp(argv[0],"write") == 0) {
+        len = argc - 3;
+        index = 0;
+        while(index < len) {
+            if(strncasecmp(argv[index + 3],"0x",2) == 0) { /* hex digit */
+                if(!sscanf(argv[index+3], "%x", &tempint)) {
+                    printf("Bad numeric argument: %s\n",argv[index+3]);
+                    return FALSE;
+                }
+            } else {
+                if(!sscanf(argv[index+3], "%d", &tempint)) {
+                    printf("Bad numeric argument: %s\n",argv[index+3]);
+                    return FALSE;
+                }
+            }
+
+            buffer[index] = (unsigned char)tempint;
+            index++;
+        }
+
+        if((result = mp_i2c_write(d, device, addr, len, &buffer[0]))) {
+            return TRUE;
+        } else {
+            if(buffer[0] < I2C_E_LAST) {
+                printf("Error 0x%02x: %s\n",buffer[0],i2c_errors[buffer[0]]);
+            } else {
+                printf("I2C Error 0x%02x\n",buffer[0]);
+            }
+        }
+
     } else {
         action_list[action].usage();
     }
@@ -332,7 +364,7 @@ void execute_line(char *line) {
         }
 
         if(mp_current)
-            mp_destroy_handle(mp_current);
+            mp_close(mp_current);
 
         mp_current = mp_open(BOARD_TYPE_ANY,atoi(argv[1]));
         if(!mp_current) {

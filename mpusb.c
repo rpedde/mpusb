@@ -119,7 +119,7 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
 
     debug_printf("wrote %d bytes\n",r);
     for(index = 0; index < r; index++) {
-        debug_printf("0x%02x ",src[index]);
+        debug_printf("0x%02x ",(unsigned char)src[index]);
     }
     debug_printf("\n");
 
@@ -179,7 +179,6 @@ int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, un
 int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data) {
     char *buf;
     int result = FALSE;
-    int retval;
 
     if(d->board_type != BOARD_TYPE_I2C) {
         return FALSE;
@@ -203,12 +202,12 @@ int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, u
     if(mp_write_usb(d,4+len,buf)) {
         result = mp_recv_usb(d, 1, buf);
         if(result) {
-            retval = buf[0];
             free(buf);
-            return retval;
+            return result;
         }
     }
 
+    data[0] = buf[0];
     free(buf);
     return result;
 }
@@ -233,8 +232,7 @@ int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *ret
     if(mp_write_usb(d,3,buf)) {
         result = mp_recv_usb(d, 2, buf);
         if(result)
-            *retval = buf[0];
-        return result;
+            return result;
     }
 
     return FALSE;
