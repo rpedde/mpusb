@@ -23,6 +23,14 @@
 
 #include <stdint.h>
 
+
+struct mp_i2c_handle_t {
+    int device;
+    int mpusb;
+    int type;
+    struct mp_i2c_handle_t *pnext;
+};
+
 struct mp_handle_t {
     struct usb_dev_handle *phandle;
 
@@ -33,6 +41,7 @@ struct mp_handle_t {
     int serial;
     int fw_major;
     int fw_minor;
+    int i2c_devices;
     union {
         struct {
             int devices;
@@ -42,6 +51,7 @@ struct mp_handle_t {
             int devices;
         } genio;
     };
+    struct mp_i2c_handle_t i2c_list;
 };
 
 #define BOARD_TYPE_ANY       0x00

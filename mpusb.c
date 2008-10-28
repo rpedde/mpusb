@@ -55,6 +55,10 @@ char *processor_type[] = {
     "18F2550"
 };
 
+char *i2c_type[] = {
+    "HD44780 LCD Panel"
+};
+
 const static int mp_vendorID=0x04d8; // Microchip, Inc
 const static int mp_productID=0x000c; // PICDEM-FS USB
 const static int mp_bootloaderID=0x000b; // when in bootloader mode
@@ -231,8 +235,10 @@ int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *ret
 
     if(mp_write_usb(d,3,buf)) {
         result = mp_recv_usb(d, 2, buf);
-        if(result)
+        if(result) {
+            *retval = buf[0];
             return result;
+        }
     }
 
     return FALSE;
@@ -285,6 +291,9 @@ int mp_power_set(struct mp_handle_t *d, int state) {
 
 int mp_query_info(struct mp_handle_t *d) {
     char buf[8];
+    int index;
+    int result;
+    struct mp_i2c_handle_t *pi2c;
 
     // we'll assume we already have the space allocated, and
     // phandle is already assigned
@@ -303,13 +312,16 @@ int mp_query_info(struct mp_handle_t *d) {
         return FALSE;
 
     d->board_type = (int) buf[0];
-    d->serial = (int) buf[1];
-    d->processor_type = (int) buf[2];
-    d->processor_speed = (int) buf[3];
+    d->serial = (unsigned int) buf[1];
+    d->processor_type = (unsigned int) buf[2];
+    d->processor_speed = (unsigned int) buf[3];
 
     d->has_eeprom = 0;
     if(d->processor_type == PROCESSOR_TYPE_2550)
         d->has_eeprom = 1;
+
+    d->i2c_list.pnext = NULL;
+    d->i2c_devices = 0;
 
     // Get board specific info
     debug_printf("Getting board specific info\n");
@@ -320,6 +332,31 @@ int mp_query_info(struct mp_handle_t *d) {
         d->power.current = buf[0];
         d->power.devices = buf[1];
         break;
+    case BOARD_TYPE_I2C:
+        for(index = 0x77; index > 0x7; index--) {
+            if((result = mp_i2c_read(d, index, 0, 1, (unsigned char *)&buf[0]))) {
+                /* we found an i2c device */
+                d->i2c_devices++;
+                pi2c = (struct mp_i2c_handle_t*)malloc(sizeof(struct mp_i2c_handle_t));
+                if(!pi2c) {
+                    perror("malloc");
+                    exit(1);
+                }
+                memset(pi2c,0,sizeof(struct mp_i2c_handle_t));
+
+                pi2c->device = index;
+                if((unsigned char)buf[0] == 0xAE) {
+                    pi2c->mpusb = 1;
+                    /* see what kind... */
+                    if((result = mp_i2c_read(d, index, 1, 1, (unsigned char *)&buf[0]))) {
+                        pi2c->type = buf[0];
+                    }
+                }
+
+                pi2c->pnext = d->i2c_list.pnext;
+                d->i2c_list.pnext = pi2c;
+            }
+        }
     default:
         break;
     }
@@ -390,6 +427,7 @@ void mp_destroy_handle(struct mp_handle_t *ph) {
 int mp_list(void) {
     struct usb_device *device;
     struct usb_bus* bus;
+    struct mp_i2c_handle_t *pi2c;
     int found = 0;
     struct mp_handle_t *pmp;
 
@@ -427,6 +465,16 @@ int mp_list(void) {
                            pmp->power.current,
                            pmp->power.devices);
                     break;
+                case BOARD_TYPE_I2C:
+                    pi2c = pmp->i2c_list.pnext;
+                    while(pi2c) {
+                        printf(" - I2C Device %02d: %s\n",
+                               pi2c->device, pi2c->mpusb ? i2c_type[pi2c->type] :
+                               "Non-16F690 Device");
+                        pi2c = pi2c->pnext;
+                    }
+                    break;
+
                 default:
                     break;
                 }

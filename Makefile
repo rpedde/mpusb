@@ -17,7 +17,7 @@
 
 LIBUSB=/sw
 
-OPTS=-Wall -D_GNU_SOURCE
+OPTS=-Wall -D_GNU_SOURCE -g
 OBJS=mpusb.o
 
 CFLAGS=$(OPTS) -I$(LIBUSB)/include #-DDEBUG
