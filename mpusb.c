@@ -183,6 +183,7 @@ int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, un
 int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data) {
     char *buf;
     int result = FALSE;
+    int retval;
 
     if(d->board_type != BOARD_TYPE_I2C) {
         return FALSE;
@@ -204,14 +205,15 @@ int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, u
     debug_printf("executing mp_i2c_write: dev 0x%02x, addr 0x%02x, len 0x%02x\n", dev, addr, len);
 
     if(mp_write_usb(d,4+len,buf)) {
-        result = mp_recv_usb(d, 1, buf);
+        result = mp_recv_usb(d, 2, buf);
         if(result) {
+            retval=buf[0];
+            data[0] = buf[1];
             free(buf);
-            return result;
+            return retval;
         }
     }
 
-    data[0] = buf[0];
     free(buf);
     return result;
 }
