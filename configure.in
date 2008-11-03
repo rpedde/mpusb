@@ -1,0 +1,50 @@
+dnl $Id: configure.in 1706 2007-12-28 08:48:51Z rpedde $
+dnl
+dnl Process this file with autoconf to produce a configure script.
+AC_INIT(src/main.c, 0.0.1)
+AC_CONFIG_HEADER([config.h])
+AM_INIT_AUTOMAKE
+
+AC_USE_SYSTEM_EXTENSIONS
+
+dnl Checks for programs.
+AC_PROG_CC
+AC_PROG_LIBTOOL
+
+CPPFLAGS="${CPPFLAGS} -g -Wall"
+CFLAGS=""
+
+echo Host type is $host
+CPPFLAGS="$CPPFLAGS -DHOST='\"$host\"'"
+
+case $host in
+*darwin*)
+	CPPFLAGS="$CPPFLAGS -no-cpp-precomp -DMAC"
+	LDFLAGS="$LDFLAGS -framework CoreFoundation"	
+esac
+
+AC_ARG_WITH(usb-libs,
+	[ --with-usb-libs[[=DIR]]              link to libusb in DIR],[
+	if test "$withval" != "no" -a "$withval" != "yes"; then
+	   Z_DIR=$withval
+	   LDFLAGS="${LDFLAGS} -L$withval -lusb"
+	fi
+])
+
+AC_ARG_WITH(usb-includes,
+	[ --with-usb-includes[[=DIR]]          link to libusb in DIR],[
+	if test "$withval" != "no" -a "$withval" != "yes"; then
+	   Z_DIR=$withval
+	   CPPFLAGS="${CPPFLAGS} -I$withval"
+	fi
+])
+
+AC_CHECK_HEADERS(usb.h,,[
+ AC_MSG_ERROR([usb.h not found... must have libusb installed])])
+AC_CHECK_LIB(usb,usb_init,,echo "Must have libusb installed";exit)
+
+AC_CHECK_HEADERS(readline/readline.h,,[
+ AC_MSG_ERROR([readline.h not found... must have libreadline installed])])
+AC_CHECK_LIB(readline,readline,,echo "Must have libreadline installed";exit)
+
+AC_OUTPUT(src/Makefile Makefile)
