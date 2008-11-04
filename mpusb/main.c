@@ -28,8 +28,8 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
+#include <mpusb/mpusb.h>
 #include "main.h"
-#include "mpusb.h"
 
 /* Handler forwards */
 int handler_power(struct mp_handle_t *d, int action, int argc, char **argv);

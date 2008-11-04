@@ -1,7 +1,7 @@
 dnl $Id: configure.in 1706 2007-12-28 08:48:51Z rpedde $
 dnl
 dnl Process this file with autoconf to produce a configure script.
-AC_INIT(src/main.c, 0.0.1)
+AC_INIT(mpusb/main.c, 0.0.1)
 AC_CONFIG_HEADER([config.h])
 AM_INIT_AUTOMAKE
 
@@ -47,4 +47,4 @@ AC_CHECK_HEADERS(readline/readline.h,,[
  AC_MSG_ERROR([readline.h not found... must have libreadline installed])])
 AC_CHECK_LIB(readline,readline,,echo "Must have libreadline installed";exit)
 
-AC_OUTPUT(src/Makefile Makefile)
+AC_OUTPUT(mpusb/Makefile Makefile)
