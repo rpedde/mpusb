@@ -80,7 +80,7 @@ ACTION action_list[] = {
 };
 
 #define I2C_E_SUCCESS 0
-#define I2C_E_NODpEV   1
+#define I2C_E_NODEV   1
 #define I2C_E_NOACK   2
 #define I2C_E_TIMEOUT 3
 #define I2C_E_OTHER   4
@@ -402,9 +402,9 @@ void execute_line(char *line) {
             printf("No device currently attached.  Use 'attach <serial>' first\n");
         } else {
             if((action_list[action].required_type != BOARD_TYPE_ANY) &&
-               (mp_current->board_type != action_list[action].required_type)) {
+               (mp_current->board_id != action_list[action].required_type)) {
                 printf("Current board type (%s) does not support this action\n",
-                       board_type[mp_current->board_type]);
+                       mp_current->board_type);
             } else {
                 // can do!
                 action_list[action].handler(mp_current,action,argc-1,&argv[1]);
@@ -425,7 +425,7 @@ int do_interactive(void) {
             strcpy(prompt,"\x1b[32m(none)\x1b[0m> ");
         } else {
             snprintf(prompt,sizeof(prompt),"\x1b[32m%s\x1b[0m> ",
-                     board_type[mp_current->board_type]);
+                     mp_current->board_type);
         }
 
         line = readline(prompt);
@@ -471,6 +471,7 @@ int main(int argc, char *argv[]) {
     }
 
     if(interactive) {
+        mp_init();
         do_interactive();
         exit(0);
     }
@@ -497,6 +498,8 @@ int main(int argc, char *argv[]) {
         show_usage();
         exit(1);
     }
+
+    mp_init();
 
     if(!action_list[action].requires_device) {
         action_list[action].handler(NULL,action, callback_argc, callback_argv);

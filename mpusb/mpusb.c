@@ -47,17 +47,22 @@ char *board_type[] = {
     "ANY",
     "Power Controller",
     "Generic I2C",
-    "Neo-Geo interface"
+    "Neo-Geo interface",
+    "Unknown"
 };
 
 char *processor_type[] = {
     "18F2450",
-    "18F2550"
+    "18F2550",
+    "Unknown",
 };
 
 char *i2c_type[] = {
-    "HD44780 LCD Panel"
+    "HD44780 LCD Panel",
+    "Unknown"
 };
+
+static struct mp_handle_t devicelist;
 
 const static int mp_vendorID=0x04d8; // Microchip, Inc
 const static int mp_productID=0x000c; // PICDEM-FS USB
@@ -75,6 +80,7 @@ int mp_recv_usb(struct mp_handle_t *d,int len, char *dest);
 int mp_write_usb(struct mp_handle_t *d, int len, char *src);
 int mp_query_info(struct mp_handle_t *d);
 struct mp_handle_t *mp_create_handle(struct usb_device *handle);
+void mp_release_handle(struct mp_handle_t *ph);
 void mp_destroy_handle(struct mp_handle_t *ph);
 int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *retval);
 int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char value);
@@ -145,7 +151,7 @@ int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, un
     int result = FALSE;
     int retval;
 
-    if(d->board_type != BOARD_TYPE_I2C) {
+    if(d->board_id != BOARD_TYPE_I2C) {
         return FALSE;
     }
 
@@ -185,7 +191,7 @@ int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, u
     int result = FALSE;
     int retval;
 
-    if(d->board_type != BOARD_TYPE_I2C) {
+    if(d->board_id != BOARD_TYPE_I2C) {
         return FALSE;
     }
 
@@ -313,13 +319,22 @@ int mp_query_info(struct mp_handle_t *d) {
     if((!mp_write_usb(d,2,"\x30\1")) || (!mp_recv_usb(d, 4, buf)))
         return FALSE;
 
-    d->board_type = (int) buf[0];
+    d->board_id = (int) buf[0];
+    d->board_type = board_type[BOARD_TYPE_UNKNOWN];
+
+    if(d->board_id < BOARD_TYPE_UNKNOWN)
+        d->board_type = board_type[d->board_id];
+
     d->serial = (unsigned int) buf[1];
-    d->processor_type = (unsigned int) buf[2];
+    d->processor_id = (unsigned int) buf[2];
+    d->processor_type = processor_type[PROCESSOR_TYPE_UNKNOWN];
+    if(d->processor_id < PROCESSOR_TYPE_UNKNOWN)
+        d->processor_type = processor_type[d->processor_id];
+
     d->processor_speed = (unsigned int) buf[3];
 
     d->has_eeprom = 0;
-    if(d->processor_type == PROCESSOR_TYPE_2550)
+    if(d->processor_id == PROCESSOR_TYPE_2550)
         d->has_eeprom = 1;
 
     d->i2c_list.pnext = NULL;
@@ -327,7 +342,7 @@ int mp_query_info(struct mp_handle_t *d) {
 
     // Get board specific info
     debug_printf("Getting board specific info\n");
-    switch(d->board_type) {
+    switch(d->board_id) {
     case BOARD_TYPE_POWER:
         if((!mp_write_usb(d,2,"\x31\2")) || (!mp_recv_usb(d, 2, buf)))
             return FALSE;
@@ -351,7 +366,10 @@ int mp_query_info(struct mp_handle_t *d) {
                     pi2c->mpusb = 1;
                     /* see what kind... */
                     if((result = mp_i2c_read(d, index, 1, 1, (unsigned char *)&buf[0]))) {
-                        pi2c->type = buf[0];
+                        pi2c->i2c_id = buf[0];
+                        pi2c->i2c_type = i2c_type[I2C_UNKNOWN];
+                        if(pi2c->i2c_id < I2C_UNKNOWN)
+                            pi2c->i2c_type = i2c_type[pi2c->i2c_id];
                     }
                 }
 
@@ -420,77 +438,73 @@ void mp_destroy_handle(struct mp_handle_t *ph) {
     usb_reset(ph->phandle);
     usb_release_interface(ph->phandle, mp_interface);
     usb_close(ph->phandle);
+
+    /* FIXME: Walk the i2c devices */
     free(ph);
+}
+
+/*
+ * release a handle
+ */
+void mp_release_handle(struct mp_handle_t *ph) {
+    usb_reset(ph->phandle);
+    usb_release_interface(ph->phandle, mp_interface);
 }
 
 /*
  * list all USB devices
  */
 int mp_list(void) {
-    struct usb_device *device;
-    struct usb_bus* bus;
     struct mp_i2c_handle_t *pi2c;
     int found = 0;
     struct mp_handle_t *pmp;
 
-    usb_init();
+    pmp = devicelist.pnext;
 
-    usb_find_busses();
-    usb_find_devices();
-
-    for (bus=usb_get_busses();bus!=NULL;bus=bus->next) {
-        struct usb_device* usb_devices = bus->devices;
-        debug_printf("Checking bus %s\n",bus->dirname);
-        for(device=usb_devices;device!=NULL;device=device->next) {
-            debug_printf("Checking device %s\n",device->filename);
-            pmp = mp_create_handle(device);
-            if(pmp) {
-                if(!found) {
-                    printf("\nBus  Serial   Firmware     Proc   Mhz EEPROM  Type\n");
-                    printf("----------------------------------------------"
-                           "-----------------\n");
-                    found = 1;
-                }
-                printf("%3s    %04d       %d.%02d  %-8s   %-3d   %s  %s\n",
-                       device->bus->dirname,
-                       pmp->serial,
-                       pmp->fw_major,
-                       pmp->fw_minor,
-                       processor_type[pmp->processor_type],
-                       pmp->processor_speed,
-                       pmp->has_eeprom ? "Yes" : " No",
-                       board_type[pmp->board_type]);
-
-                switch(pmp->board_type) {
-                case BOARD_TYPE_POWER:
-                    printf("  - %d Amp\n  - %d outlet(s)\n",
-                           pmp->power.current,
-                           pmp->power.devices);
-                    break;
-                case BOARD_TYPE_I2C:
-                    pi2c = pmp->i2c_list.pnext;
-                    while(pi2c) {
-                        printf(" - I2C Device %02d: %s\n",
-                               pi2c->device, pi2c->mpusb ? i2c_type[pi2c->type] :
-                               "Non-16F690 Device");
-                        pi2c = pi2c->pnext;
-                    }
-                    break;
-
-                default:
-                    break;
-                }
-
-                mp_destroy_handle(pmp);
-            }
+    while(pmp) {
+        if(!found) {
+            printf("\nSerial   Firmware     Proc   Mhz EEPROM  Type\n");
+            printf("----------------------------------------------"
+                   "-----------------\n");
+            found = 1;
         }
+        printf("%04d       %d.%02d  %-8s   %-3d   %s  %s\n",
+               pmp->serial,
+               pmp->fw_major,
+               pmp->fw_minor,
+               pmp->processor_type,
+               pmp->processor_speed,
+               pmp->has_eeprom ? "Yes" : " No",
+               pmp->board_type);
+
+        switch(pmp->board_id) {
+        case BOARD_TYPE_POWER:
+            printf("  - %d Amp\n  - %d outlet(s)\n",
+                   pmp->power.current,
+                   pmp->power.devices);
+            break;
+        case BOARD_TYPE_I2C:
+            pi2c = pmp->i2c_list.pnext;
+            while(pi2c) {
+                printf(" - I2C Device %02d: %s\n",
+                       pi2c->device, pi2c->mpusb ? pi2c->i2c_type :
+                       "Non-16F690 Device");
+                pi2c = pi2c->pnext;
+            }
+            break;
+
+        default:
+            break;
+        }
+
+        pmp = pmp->pnext;
     }
 
     return TRUE;
 }
 
 void mp_close(struct mp_handle_t *d) {
-    mp_destroy_handle(d);
+    mp_release_handle(d);
 }
 
 /* Find the first USB device with this vendor and product.
@@ -501,9 +515,40 @@ void mp_close(struct mp_handle_t *d) {
  *  for all the USB stuff.  Thanks!
  */
 struct mp_handle_t *mp_open(int type, int id) {
+    struct mp_handle_t *pmp;
+
+    pmp = devicelist.pnext;
+    while(pmp) {
+        if(((pmp->board_id == type) || (type == BOARD_TYPE_ANY)) &&
+           ((id == BOARD_SERIAL_ANY) || (id == pmp->serial))) {
+
+            if(usb_set_configuration(pmp->phandle, mp_configuration) < 0) {
+                debug_printf("Error in set_configuration\n");
+                return NULL;
+            }
+
+            if (usb_claim_interface(pmp->phandle, mp_interface) < 0) {
+                debug_printf("Error in claim_interface\n");
+                return NULL;
+            }
+
+            return pmp;
+        }
+        pmp = pmp->pnext;
+    }
+    return NULL;
+}
+
+struct mp_handle_t *mp_devicelist(void) {
+    return devicelist.pnext;
+}
+
+int mp_init(void) {
     struct usb_device *device;
     struct usb_bus* bus;
     struct mp_handle_t *pmp;
+
+    devicelist.pnext = NULL;
 
     if (geteuid()!=0) {
         fprintf(stderr,"This program must be run as root.\n");
@@ -527,14 +572,12 @@ struct mp_handle_t *mp_open(int type, int id) {
         for(device=usb_devices;device!=NULL;device=device->next) {
             pmp = mp_create_handle(device);
             if(pmp) {
-                if(((pmp->board_type == type) || (type == BOARD_TYPE_ANY)) &&
-                   ((id == BOARD_SERIAL_ANY) || (id == pmp->serial))) {
-                    return pmp;
-                }
-
-                mp_destroy_handle(pmp);
+                pmp->pnext = devicelist.pnext;
+                devicelist.pnext = pmp;
+                mp_release_handle(pmp);
             }
         }
     }
-    return NULL;
+    return TRUE;
 }
+

@@ -1,5 +1,5 @@
 /*
-** This file is part of fsusb_picdem
+** This file is based on fsusb_picdem
 **
 ** fsusb_picdem is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU General Public License as
@@ -27,50 +27,70 @@
 struct mp_i2c_handle_t {
     int device;
     int mpusb;
-    int type;
+    int i2c_id;
+    char *i2c_type;
     struct mp_i2c_handle_t *pnext;
 };
 
 struct mp_handle_t {
     struct usb_dev_handle *phandle;
 
-    int board_type;
-    int processor_type;
+    int board_id;
+    char *board_type;
+
+    int processor_id;
+    char *processor_type;
+
     int processor_speed;
     int has_eeprom;
     int serial;
     int fw_major;
     int fw_minor;
     int i2c_devices;
-    union {
-        struct {
-            int devices;
-            int current;
-        } power;
-        struct {
-            int devices;
-        } genio;
-    };
+    struct {
+        int devices;
+        int current;
+    } power;
+    struct {
+        int devices;
+    } genio;
     struct mp_i2c_handle_t i2c_list;
+    struct mp_handle_t *pnext;
 };
 
 #define BOARD_TYPE_ANY       0x00
 #define BOARD_TYPE_POWER     0x01
 #define BOARD_TYPE_I2C       0x02
 #define BOARD_TYPE_NEOGEO    0x03
+#define BOARD_TYPE_UNKNOWN   0x04
 
 #define BOARD_SERIAL_ANY     0x00
 
-#define PROCESSOR_TYPE_2450  0x00
-#define PROCESSOR_TYPE_2550  0x01
+#define PROCESSOR_TYPE_2450    0x00
+#define PROCESSOR_TYPE_2550    0x01
+#define PROCESSOR_TYPE_UNKNOWN 0x02
 
+#define I2C_HD44780            0x00
+#define I2C_UNKNOWN            0x01
+
+#ifndef TRUE
+# define TRUE 1
+#endif
+
+#ifndef FALSE
+# define FALSE 0
+#endif
+
+/* get rid of these... */
 extern char *board_type[];
 extern char *processor_type[];
 
 /* External Functions */
+extern int mp_init(void);
 extern struct mp_handle_t *mp_open(int type, int id);
 extern void mp_close(struct mp_handle_t *d);
 extern int mp_list(void);
+extern struct mp_handle_t *mp_devicelist(void);
 
 /* Power functions */
 extern int mp_power_set(struct mp_handle_t *d, int state);
