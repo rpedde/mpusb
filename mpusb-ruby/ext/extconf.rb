@@ -8,4 +8,4 @@ if !have_library("mpusb","mp_init")
 end
 have_library("c","va_end")
 $LDFLAGS += ' -framework CoreFoundation -lc'
-create_makefile "mpusb"
+create_makefile "mpusbapi"
