@@ -30,6 +30,7 @@
 #include <unistd.h> /* for geteuid */
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "main.h"
 #include "mpusb.h"
 
@@ -74,8 +75,13 @@ const static int mp_endpoint_in=1;
 const static int mp_endpoint_out=1;
 const static int mp_timeout=1000; /* timeout in ms */
 
+static int mp_i2c_min = I2C_LOW;
+static int mp_i2c_max = I2C_HIGH;
+
+static int mp_debug = 0;
 
 /* Forwards */
+void mp_set_debug(int value);
 int mp_recv_usb(struct mp_handle_t *d,int len, char *dest);
 int mp_write_usb(struct mp_handle_t *d, int len, char *src);
 int mp_query_info(struct mp_handle_t *d);
@@ -87,12 +93,27 @@ int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char val
 int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
 int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
 
+#define debug_printf(args...) mp_log(args)
 
-#ifdef DEBUG
-# define debug_printf(args...) fprintf(stderr, args)
-#else
-# define debug_printf(args...)
-#endif
+
+void mp_set_debug(int value) {
+    mp_debug=value;
+}
+
+void mp_log(char *fmt, ...) {
+    char errbuf[4096];
+    va_list ap;
+
+    if(!mp_debug)
+        return;
+
+    va_start(ap, fmt);
+    vsnprintf(errbuf, sizeof(errbuf), fmt, ap);
+    va_end(ap);
+
+    fprintf(stderr,"MPUSB: %s\n", errbuf);
+}
+
 
 
 /*
@@ -297,6 +318,23 @@ int mp_power_set(struct mp_handle_t *d, int state) {
     return FALSE;
 }
 
+/**
+ * set the default low point on the i2c bus query
+ */
+int mp_i2c_default_min(int min) {
+    mp_i2c_min = min;
+    return TRUE;
+}
+
+/**
+ * set the default high point on the i2c bus query
+ */
+int mp_i2c_default_max(int max) {
+    mp_i2c_max = max;
+    return TRUE;
+}
+
+
 int mp_query_info(struct mp_handle_t *d) {
     char buf[8];
     int index;
@@ -350,7 +388,7 @@ int mp_query_info(struct mp_handle_t *d) {
         d->power.devices = buf[1];
         break;
     case BOARD_TYPE_I2C:
-        for(index = 0x77; index > 0x7; index--) {
+        for(index = mp_i2c_max; index >= mp_i2c_min; index--) {
             if((result = mp_i2c_read(d, index, 0, 1, (unsigned char *)&buf[0]))) {
                 /* we found an i2c device */
                 d->i2c_devices++;

@@ -73,6 +73,10 @@ struct mp_handle_t {
 #define I2C_HD44780            0x00
 #define I2C_UNKNOWN            0x01
 
+#define I2C_LOW            0x08
+#define I2C_HIGH           0x77
+
+
 #ifndef TRUE
 # define TRUE 1
 #endif
@@ -91,6 +95,7 @@ extern struct mp_handle_t *mp_open(int type, int id);
 extern void mp_close(struct mp_handle_t *d);
 extern int mp_list(void);
 extern struct mp_handle_t *mp_devicelist(void);
+extern void mp_set_debug(int value);
 
 /* Power functions */
 extern int mp_power_set(struct mp_handle_t *d, int state);
@@ -102,5 +107,7 @@ extern int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned c
 /* i2c functions */
 extern int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
 extern int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
+extern int mp_i2c_default_min(int min);
+extern int mp_i2c_default_max(int max);
 
 #endif /* __MPUSB_H__ */

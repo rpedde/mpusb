@@ -44,6 +44,11 @@ typedef struct mpusb_i2cdeviceinfo_t {
 static VALUE mpusb_init(VALUE self);
 static VALUE mpusb_open(VALUE self, VALUE type, VALUE serial);
 static VALUE mpusb_devicelist(VALUE self);
+static VALUE mpusb_getdebug(VALUE self);
+static VALUE mpusb_setdebug(VALUE self, VALUE newvalue);
+
+static VALUE mpusb_i2c_default_max(VALUE self, VALUE newvalue);
+static VALUE mpusb_i2c_default_min(VALUE self, VALUE newvalue);
 
 static VALUE mpdevice_init(int argc, VALUE *argv, VALUE self);
 static VALUE mpdevice_allocate(VALUE klass);
@@ -53,12 +58,16 @@ static VALUE mpi2c_init(int argc, VALUE *argv, VALUE self);
 static VALUE mpi2c_allocate(VALUE klass);
 static void mpi2c_free(I2CDEVICEINFO *self);
 
+static int mpusb_debug = 0;
 
 /*
  * optionally print debug info
  */
 void eprintf(char *fmt, ...) {
     va_list ap;
+
+    if(!mpusb_debug)
+        return;
 
     va_start(ap, fmt);
     vfprintf(stdout, fmt, ap);
@@ -128,6 +137,25 @@ static VALUE mpusb_devicelist(VALUE self) {
     return v_ary_device;
 }
 
+static VALUE mpusb_getdebug(VALUE self) {
+    return mpusb_debug ? Qtrue : Qfalse;
+}
+
+static VALUE mpusb_setdebug(VALUE self, VALUE newvalue) {
+    mpusb_debug = (newvalue == Qfalse) ? 0 : 1;
+    mp_set_debug(NUM2INT(newvalue));
+    return newvalue == Qfalse ? Qfalse : Qtrue;
+}
+
+static VALUE mpusb_i2c_default_max(VALUE self, VALUE newvalue) {
+    mp_i2c_default_max(NUM2INT(newvalue));
+    return newvalue;
+}
+
+static VALUE mpusb_i2c_default_min(VALUE self, VALUE newvalue) {
+    mp_i2c_default_min(NUM2INT(newvalue));
+    return newvalue;
+}
 
 static VALUE mpdevice_init(int argc, VALUE *argv, VALUE self) {
     /* the initializer is either a serial, or a wrapped mp_handle_t */
@@ -209,7 +237,23 @@ static VALUE mpdevice_init(int argc, VALUE *argv, VALUE self) {
 }
 
 static VALUE mpdevice_power_set(VALUE self, VALUE device_id, VALUE state) {
-    return Qnil;
+    DEVICEINFO *pdev;
+    int i_device, i_state;
+    int i_result;
+
+    Data_Get_Struct(self, DEVICEINFO, pdev);
+
+    i_device = NUM2INT(device_id);
+    if(state == Qfalse) {
+        i_state = 0;
+    } else {
+        i_state = 1;
+    }
+
+    // The device id is currently ignored.  Needs to be fixed
+    // for firmware versions that support multiple power devices
+    i_result = mp_power_set(pdev->dev, i_state);
+    return INT2FIX((int) i_result);
 }
 
 static VALUE mpdevice_read_eeprom(VALUE self, VALUE address) {
@@ -222,7 +266,7 @@ static VALUE mpdevice_read_eeprom(VALUE self, VALUE address) {
     if(result)
         return INT2FIX((int) retval);
 
-    /* need to raise an error */
+    // need to raise an error
     rb_raise(rb_eException,"Cannot read eeprom register\n");
     return Qnil;
 }
@@ -353,9 +397,18 @@ void Init_mpusbapi() {
     rb_define_const(cMPUSB, "I2C_HD44780", INT2FIX(I2C_HD44780));
     rb_define_const(cMPUSB, "I2C_UNKNOWN", INT2FIX(I2C_UNKNOWN));
 
+    rb_define_const(cMPUSB, "I2C_DEFAULT_MIN", INT2FIX(I2C_LOW));
+    rb_define_const(cMPUSB, "I2C_DEFAULT_MAX", INT2FIX(I2C_HIGH));
+
     rb_define_method(cMPUSB, "initialize", mpusb_init, 0);
     rb_define_method(cMPUSB, "open", mpusb_open, 2);
     rb_define_method(cMPUSB, "devicelist", mpusb_devicelist, 0);
+
+    rb_define_singleton_method(cMPUSB, "i2c_probe_max", mpusb_i2c_default_max, 1);
+    rb_define_singleton_method(cMPUSB, "i2c_probe_min", mpusb_i2c_default_min, 1);
+
+    rb_define_singleton_method(cMPUSB, "debug", mpusb_getdebug, 0);
+    rb_define_singleton_method(cMPUSB, "debug=", mpusb_setdebug, 1);
 
     cMPUSBDevice = rb_define_class("MPUSBAPIDevice", rb_cObject);
     rb_define_alloc_func(cMPUSBDevice,mpdevice_allocate);

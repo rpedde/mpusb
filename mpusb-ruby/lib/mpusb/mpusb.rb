@@ -22,9 +22,24 @@ class MPUSB
 
       result
     end
+
+    def debug
+      MPUSBAPI.debug
+    end
+
+    def debug=(newvalue)
+      MPUSBAPI.debug=newvalue
+    end
+
+    def set_i2c_range(max = MPUSBAPI::I2C_DEFAULT_MAX, min = MPUSBAPI::I2C_DEFAULT_MIN)
+      MPUSBAPI.i2c_probe_max(max)
+      MPUSBAPI.i2c_probe_min(min)
+    end
   end
 
   def initialize
+    MPUSBAPI.i2c_probe_max(20)
+    MPUSBAPI.i2c_probe_min(8)
   end
 end
 
@@ -61,3 +76,31 @@ class MPUSBDevice
   end
 end
 
+class MPUSBPowerDevice < MPUSBDevice
+  #
+  # device is the item id (for multi-device power devices)
+  # state is true or false
+  #
+  def power_state(device, state) 
+    @apidevice.power_set(device, state)
+  end
+end
+
+class MPUSBI2CDevice
+  def initialize(apidevice, device_address)
+    @apidevice = apidevice
+    @device_address = address
+  end
+
+  def write(address, value)
+    @apidevice.write_i2c(@device_address, address, value)
+  end
+
+  # there are at least three standard EEPROM addresses
+  # on all i2c devices.
+  #
+  # 0: boot mode (0: flash mode, 0xff: normal mode)
+  # 1: device address (pre-shifted)
+  # 2: 
+  
+end
