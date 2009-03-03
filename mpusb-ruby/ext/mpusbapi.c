@@ -195,6 +195,9 @@ static VALUE mpdevice_init(int argc, VALUE *argv, VALUE self) {
     tmpv = rb_int_new(pdev->dev->processor_speed);
     rb_iv_set(self,"@processor_speed", tmpv);
 
+    tmpv = rb_int_new(pdev->dev->board_id);
+    rb_iv_set(self,"@board_id", tmpv);
+
     tmpv = rb_int_new(pdev->dev->has_eeprom);
     rb_iv_set(self,"@has_eeprom", tmpv);
 
@@ -287,15 +290,50 @@ static VALUE mpdevice_write_eeprom(VALUE self, VALUE address, VALUE value) {
 }
 
 static VALUE mpdevice_i2c_read(VALUE self, VALUE device_id, VALUE address, VALUE len) {
-}
-
-static VALUE mpdevice_i2c_write(VALUE self, VALUE device_id, VALUE address, VALUE data, VALUE len) {
     DEVICEINFO *pdev;
     int result;
     unsigned char retval;
+    unsigned char *buffer;
+    VALUE return_buffer;
 
     Data_Get_Struct(self, DEVICEINFO, pdev);
-    result = mp_i2c_write(pdev->dev, NUM2INT(device_id), NUM2INT(address), NUM2INT(len),
+    buffer = (unsigned char *)malloc(len);
+
+    if(!buffer) {
+        rb_raise(rb_eException, "Out of memory");
+        return Qfalse;
+    }
+
+    result = mp_i2c_read(pdev->dev,
+                         (unsigned char) NUM2INT(device_id),
+                         (unsigned char) NUM2INT(address),
+                         (unsigned char) NUM2INT(len),
+                         buffer);
+
+    if(!result) {
+        free(buffer);
+        rb_raise(rb_eException, "Cannot read from device");
+        return Qnil;
+    }
+
+    return_buffer = rb_str_new2((char*)buffer);
+    free(buffer);
+    return return_buffer;
+}
+
+static VALUE mpdevice_i2c_write(VALUE self, VALUE device_id, VALUE address, VALUE data) {
+    DEVICEINFO *pdev;
+    int result;
+    unsigned char retval;
+    int len;
+
+    len = strlen((char *)RSTRING(data)->ptr);
+
+    Data_Get_Struct(self, DEVICEINFO, pdev);
+    result = mp_i2c_write(pdev->dev,
+                          (unsigned char)NUM2INT(device_id),
+                          (unsigned char) NUM2INT(address),
+                          (unsigned char) len,
                           (unsigned char *)RSTRING(data)->ptr);
 
     if(result)
@@ -414,6 +452,7 @@ void Init_mpusbapi() {
     rb_define_alloc_func(cMPUSBDevice,mpdevice_allocate);
 
     rb_define_attr(cMPUSBDevice,"board_type", 1, 0);
+    rb_define_attr(cMPUSBDevice,"board_id", 1, 0);
     rb_define_attr(cMPUSBDevice,"processor_type", 1, 0);
     rb_define_attr(cMPUSBDevice,"processor_speed", 1, 0);
     rb_define_attr(cMPUSBDevice,"has_eeprom", 1, 0);
@@ -428,7 +467,7 @@ void Init_mpusbapi() {
     rb_define_method(cMPUSBDevice, "read_eeprom", mpdevice_read_eeprom, 1);
     rb_define_method(cMPUSBDevice, "write_eeprom", mpdevice_write_eeprom, 2);
     rb_define_method(cMPUSBDevice, "i2c_read", mpdevice_i2c_read, 3);
-    rb_define_method(cMPUSBDevice, "i2c_write", mpdevice_i2c_write, 4);
+    rb_define_method(cMPUSBDevice, "i2c_write", mpdevice_i2c_write, 3);
 
     cMPUSBI2CDevice = rb_define_class("MPUSBAPII2CDevice", rb_cObject);
     rb_define_alloc_func(cMPUSBI2CDevice, mpi2c_allocate);
