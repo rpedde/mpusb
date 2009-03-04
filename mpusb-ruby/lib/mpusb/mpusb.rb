@@ -66,7 +66,6 @@ class MPUSB
     MPUSBAPI.i2c_probe_max(20)
     MPUSBAPI.i2c_probe_min(8)
   end
-
 end
 
 class MPUSBDevice
@@ -83,7 +82,7 @@ class MPUSBDevice
   end
 
   def write_i2c(device, address, value)
-    result = @apidevice.i2c_write(device,address,value,value.length)
+    result = @apidevice.i2c_write(device,address,value)
   end
 
   def set_serial(serial)
@@ -135,21 +134,31 @@ class MPUSBI2CDevice < MPUSBDevice
   end
 
   private
+  def i2c_device_factory(device)
+    if(device.i2c_id == MPUSBAPI::I2C_HD44780)
+      puts "Creating HD44780 I2C device"
+      return MPUSBHD44780.new(@apidevice,device)
+    end
+
+    # no specific type
+    return MPUSBI2CBoard.new(@apidevice,device)
+  end
+
   def maybe_get_devices
     unless @i2c_devices
       @i2c_devices = []
       @apidevice.i2c_devices.each do |device|
-        @i2c_devices << MPUSBI2CBoard.new(@apidevice,device,device.i2c_addr)
+        @i2c_devices << i2c_device_factory(device)
       end
     end
   end
 end
 
 class MPUSBI2CBoard
-  def initialize(apidevice, i2c_device, device_address)
+  def initialize(apidevice, i2c_device)
     @apidevice = apidevice
     @i2c_device = i2c_device
-    @device_address = device_address
+    @device_address = i2c_device.i2c_addr
   end
 
   def write(address, value)
@@ -175,4 +184,62 @@ class MPUSBI2CBoard
   # 2: set EEPROM index
   # 3: write EEPROM
   #
+  # EEPROM Addresses
+  # 0: Boot mode (0 = default, 1 = bootloader)
+  # 1: Device address
+  #
+end
+
+
+class MPUSBHD44780 < MPUSBI2CBoard
+  # Special HD44780 EEPROM addresses
+  #
+  # 10: width
+  # 11: height
+  #
+  # Special write addresses
+  # 64 (0x40): [-w] put char
+  # 65 (0x41): [-w] put command
+  # 66 (0x42): [rw] put brightness
+  #
+  def initialize(apidevice, i2c_device)
+    super(apidevice, i2c_device)
+  end
+
+  def width
+    write(2,"\x0a")
+    read(3,1).to_i
+  end
+
+  def height
+    write(2,"\x0b")
+    read(3,1).to_i
+  end
+
+  def width=(width)
+    write(2,"\x0a")
+    write(3,[width].pack("c"))
+  end
+
+  def height=(height)
+    write(2,"\x0b")
+    write(3,[width].pack("c"))
+  end
+
+  def brightness=(brightness)
+    write(66,[brightness].pack("c"))
+  end
+
+  def brightness
+    read(66,1)[0]
+  end
+
+  def clear
+    write(65,"\x01")
+  end
+
+  def puts(output)
+    write(64,output)
+  end
+  
 end
