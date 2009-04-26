@@ -83,14 +83,16 @@ ACTION action_list[] = {
 #define I2C_E_NODEV   1
 #define I2C_E_NOACK   2
 #define I2C_E_TIMEOUT 3
-#define I2C_E_OTHER   4
-#define I2C_E_LAST    5
+#define I2C_E_STRETCH 4
+#define I2C_E_OTHER   5
+#define I2C_E_LAST    6
 
 char *i2c_errors[] = {
     "Success",
     "Invalid device",
     "Protocol error.  Missing ACK",
     "Timeout",
+    "Clock stretch error",
     "Unknown"
 };
 
@@ -453,7 +455,7 @@ int main(int argc, char *argv[]) {
     printf("Monkey Puppet Labs USB interface.  Version %d.%02d\n", VERSION_MAJOR, VERSION_MINOR);
     printf("Copyright (c) 2008 Monkey Puppet Labs.  All rights reserved.\n\n");
 
-    while((option = getopt(argc, argv, "+s:hi")) != -1) {
+    while((option = getopt(argc, argv, "+s:hid")) != -1) {
         switch(option) {
         case 's':
             id =  atoi(optarg);
@@ -463,6 +465,9 @@ int main(int argc, char *argv[]) {
             break;
         case 'i':
             interactive = 1;
+            break;
+        case 'd':
+            mp_set_debug(1);
             break;
         default:
             show_usage();
