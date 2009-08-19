@@ -59,6 +59,7 @@ char *processor_type[] = {
 };
 
 char *i2c_type[] = {
+    "18F690 Boot Loader",
     "HD44780 LCD Panel",
     "Unknown"
 };
@@ -588,10 +589,12 @@ int mp_init(void) {
 
     devicelist.pnext = NULL;
 
+#ifdef MUST_BE_ROOT
     if (geteuid()!=0) {
         fprintf(stderr,"This program must be run as root.\n");
         exit(1);
     }
+#endif
 
 #ifdef USB_DEBUG
     usb_debug=4;
@@ -619,3 +622,19 @@ int mp_init(void) {
     return TRUE;
 }
 
+/**
+ * release everything
+ */
+void mp_deinit(void) {
+    struct mp_handle_t *pmp;
+
+    pmp = devicelist.pnext;
+
+    while(pmp) {
+        devicelist.pnext = pmp->pnext;
+        mp_destroy_handle(pmp);
+        pmp = devicelist.pnext;
+    }
+
+    // no usb_deinit();
+}

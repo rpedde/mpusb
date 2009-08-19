@@ -432,6 +432,7 @@ void Init_mpusbapi() {
     rb_define_const(cMPUSB, "PROCESSOR_TYPE_2450", INT2FIX(PROCESSOR_TYPE_2450));
     rb_define_const(cMPUSB, "PROCESSOR_TYPE_2550", INT2FIX(PROCESSOR_TYPE_2550));
 
+    rb_define_const(cMPUSB, "I2C_16F690_BOOTLOADER", INT2FIX(I2C_16F690_BOOTLOADER));
     rb_define_const(cMPUSB, "I2C_HD44780", INT2FIX(I2C_HD44780));
     rb_define_const(cMPUSB, "I2C_UNKNOWN", INT2FIX(I2C_UNKNOWN));
 

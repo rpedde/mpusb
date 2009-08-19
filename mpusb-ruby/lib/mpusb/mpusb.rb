@@ -63,8 +63,8 @@ class MPUSB
   end
 
   def initialize
-    MPUSBAPI.i2c_probe_max(20)
-    MPUSBAPI.i2c_probe_min(8)
+#    MPUSBAPI.i2c_probe_max(20)
+#    MPUSBAPI.i2c_probe_min(8)
   end
 end
 

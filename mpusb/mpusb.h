@@ -23,7 +23,6 @@
 
 #include <stdint.h>
 
-
 struct mp_i2c_handle_t {
     int device;
     int mpusb;
@@ -70,8 +69,9 @@ struct mp_handle_t {
 #define PROCESSOR_TYPE_2550    0x01
 #define PROCESSOR_TYPE_UNKNOWN 0x02
 
-#define I2C_HD44780            0x00
-#define I2C_UNKNOWN            0x01
+#define I2C_16F690_BOOTLOADER  0x00
+#define I2C_HD44780            0x01
+#define I2C_UNKNOWN            0x02
 
 #define I2C_LOW            0x08
 #define I2C_HIGH           0x77
@@ -91,6 +91,8 @@ extern char *processor_type[];
 
 /* External Functions */
 extern int mp_init(void);
+extern void mp_deinit(void);
+
 extern struct mp_handle_t *mp_open(int type, int id);
 extern void mp_close(struct mp_handle_t *d);
 extern int mp_list(void);
