@@ -60,7 +60,7 @@ struct mp_handle_t {
 #define BOARD_TYPE_ANY       0x00
 #define BOARD_TYPE_POWER     0x01
 #define BOARD_TYPE_I2C       0x02
-#define BOARD_TYPE_NEOGEO    0x03
+#define BOARD_TYPE_SERVO     0x03
 #define BOARD_TYPE_UNKNOWN   0x04
 
 #define BOARD_SERIAL_ANY     0x00

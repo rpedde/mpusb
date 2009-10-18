@@ -19,8 +19,8 @@ CPPFLAGS="$CPPFLAGS -DHOST='\"$host\"'"
 
 case $host in
 *darwin*)
-	CPPFLAGS="$CPPFLAGS -no-cpp-precomp -DMAC"
-	LDFLAGS="$LDFLAGS -framework CoreFoundation"	
+	CPPFLAGS="$CPPFLAGS -no-cpp-precomp -DMAC -m32"
+	LDFLAGS="$LDFLAGS -framework CoreFoundation -m32"	
 esac
 
 AC_ARG_WITH(usb-libs,
