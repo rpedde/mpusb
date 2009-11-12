@@ -44,17 +44,20 @@
 #define CMD_I2C_WRITE      0x41
 #define CMD_RESET          0xFF
 
+#define VENDOR_RQ_WRITE_BUFFER 0x00
+#define VENDOR_RQ_READ_BUFFER  0x01
+
 char *board_type[] = {
     "ANY",
     "Power Controller",
     "Generic I2C",
-    "Neo-Geo interface",
     "Unknown"
 };
 
 char *processor_type[] = {
     "18F2450",
     "18F2550",
+    "ATmega168",
     "Unknown",
 };
 
@@ -69,6 +72,10 @@ static struct mp_handle_t devicelist;
 
 const static int mp_vendorID=0x04d8; // Microchip, Inc
 const static int mp_productID=0x000c; // PICDEM-FS USB
+
+const static int mp_vusb_vendorID=0x16c0;
+const static int mp_vusb_productID=0x05dc;
+
 const static int mp_bootloaderID=0x000b; // when in bootloader mode
 const static int mp_configuration=1; /* 1: default config */
 
@@ -86,6 +93,8 @@ static int mp_debug = 0;
 void mp_set_debug(int value);
 int mp_recv_usb(struct mp_handle_t *d,int len, char *dest);
 int mp_write_usb(struct mp_handle_t *d, int len, char *src);
+int mp_write_usb_with_response(struct mp_handle_t *d, int len, char *src, int dlen, char *dst);
+
 int mp_query_info(struct mp_handle_t *d);
 struct mp_handle_t *mp_create_handle(struct usb_device *handle);
 void mp_release_handle(struct mp_handle_t *ph);
@@ -116,8 +125,6 @@ void mp_log(char *fmt, ...) {
     fprintf(stderr,"MPUSB: %s\n", errbuf);
 }
 
-
-
 /*
  * read specific number of bytes from device.
  */
@@ -127,7 +134,7 @@ int mp_recv_usb(struct mp_handle_t *d, int len, char *dest) {
 
     r=usb_bulk_read(d->phandle, mp_endpoint_out, dest, len, mp_timeout);
 
-    debug_printf("read %i bytes\n", r);
+    debug_printf("read %i bytes", r);
     for(index = 0; index < r; index++) {
         debug_printf("0x%02x ",(unsigned char)dest[index]);
     }
@@ -150,11 +157,10 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
 
     r = usb_bulk_write(d->phandle, mp_endpoint_in, src, len, mp_timeout);
 
-    debug_printf("wrote %d bytes\n",r);
+    debug_printf("wrote %d bytes",r);
     for(index = 0; index < r; index++) {
         debug_printf("0x%02x ",(unsigned char)src[index]);
     }
-    debug_printf("\n");
 
     if(r != len) {
         fprintf(stderr,"Wanted to write %d bytes -- wrote %d\n",len, r);
@@ -164,6 +170,70 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
 
     return TRUE;
 }
+
+/**
+ * because the avr vusb uses control transfers, there is a much stronger
+ * format for the protocol.  Probably we should enforce the protocol on
+ * both types of controllers, but it's too late now.  Instead, we'll
+ * just wrap the packet in a control structure and call it a day.
+ */
+int mp_write_vusb_with_response(struct mp_handle_t *d, int len, char *src, int dlen, char *dst) {
+    int cnt;
+
+    cnt = usb_control_msg(d->phandle,USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
+                          VENDOR_RQ_WRITE_BUFFER, 0, 0, src, len, 5000);
+
+    if(cnt < 0) {
+        fprintf(stderr, "Error on write buffer: %s\n", usb_strerror());
+        return FALSE;
+    }
+
+    if(dlen) {
+        cnt = usb_control_msg(d->phandle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN,
+                              VENDOR_RQ_READ_BUFFER, 0, 0, dst, dlen, 5000);
+        if(cnt < 0) {
+            fprintf(stderr, "Error on read buffer: %s\n", usb_strerror());
+            return FALSE;
+        }
+
+        if(cnt != dlen) {
+            fprintf(stderr, "Short read.  Expecting %d, got %d\n", dlen, cnt);
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
+
+
+/**
+ * write to the device in a device specific manner,
+ * returning a buffer of the size expected.
+ *
+ * @returns TRUE on success, with dst filled to
+ * dlen, FALSE otherwise
+ */
+int mp_write_usb_with_response(struct mp_handle_t *d, int len, char *src, int dlen,
+                               char *dst) {
+
+    switch(d->comm_protocol) {
+    case COMM_PROTOCOL_PIC:
+        if(mp_write_usb(d, len, src)) {
+            return mp_recv_usb(d, dlen, dst);
+        } else {
+            return FALSE;
+        }
+        break;
+    case COMM_PROTOCOL_VUSB:
+        return mp_write_vusb_with_response(d, len, src, dlen, dst);
+    default:
+        break;
+    }
+
+    return FALSE;
+}
+
 
 
 /*
@@ -190,16 +260,13 @@ int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, un
     buf[3] = addr;
     buf[4] = len;
 
-    debug_printf("executing mp_i2c_read: dev 0x%02x, addr 0x%02x, len 0x%02x\n", dev, addr, len);
+    debug_printf("executing mp_i2c_read: dev 0x%02x, addr 0x%02x, len 0x%02x", dev, addr, len);
 
-    if(mp_write_usb(d,5,buf)) {
-        result = mp_recv_usb(d, len + 1, buf);
-        if(result) {
-            retval = buf[0];
-            memcpy(data,&buf[1],len);
-            free(buf);
-            return retval;
-        }
+    if((result = mp_write_usb_with_response(d, 5, buf, len + 1, buf))) {
+        retval = buf[0];
+        memcpy(data, &buf[1],len);
+        free(buf);
+        return retval;
     }
 
     free(buf);
@@ -231,16 +298,13 @@ int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, u
 
     memcpy(&buf[4],data,len);
 
-    debug_printf("executing mp_i2c_write: dev 0x%02x, addr 0x%02x, len 0x%02x\n", dev, addr, len);
+    debug_printf("executing mp_i2c_write: dev 0x%02x, addr 0x%02x, len 0x%02x", dev, addr, len);
 
-    if(mp_write_usb(d,4+len,buf)) {
-        result = mp_recv_usb(d, 2, buf);
-        if(result) {
-            retval=buf[0];
-            data[0] = buf[1];
-            free(buf);
-            return retval;
-        }
+    if((result = mp_write_usb_with_response(d, len + 4, buf, 2, buf))) {
+        retval=buf[0];
+        data[0] = buf[1];
+        free(buf);
+        return retval;
     }
 
     free(buf);
@@ -262,14 +326,11 @@ int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *ret
     buf[1] = 1;
     buf[2] = addr;
 
-    debug_printf("executing mp_read_eeprom: %d\n", addr);
+    debug_printf("executing mp_read_eeprom: %d", addr);
 
-    if(mp_write_usb(d,3,buf)) {
-        result = mp_recv_usb(d, 2, buf);
-        if(result) {
-            *retval = buf[0];
-            return result;
-        }
+    if((result = mp_write_usb_with_response(d, 3, buf, 2, buf))) {
+        *retval = buf[0];
+        return result;
     }
 
     return FALSE;
@@ -289,11 +350,10 @@ int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char val
     buf[2] = addr;
     buf[3] = value;
 
-    debug_printf("executing mp_write_eeprom: addr %d -> %d\n", addr, value);
+    debug_printf("executing mp_write_eeprom: addr %d -> %d", addr, value);
 
-    if(mp_write_usb(d,4,buf)) {
-        if(mp_recv_usb(d, 4, buf))
-            return (buf[0] != 0);
+    if(mp_write_usb_with_response(d, 4, buf, 4, buf)) {
+        return (buf[0] != 0);
     }
 
     return FALSE;
@@ -310,14 +370,9 @@ int mp_power_set(struct mp_handle_t *d, int state) {
     buf[1] = 0x1;
     buf[2] = state ? 0x01 : 0x00;
 
-    debug_printf("executing mp_power_set: %d\n",state);
+    debug_printf("executing mp_power_set: %d",state);
 
-    if(mp_write_usb(d, 3, buf)) {
-        // status from op, but always 1 in this case
-        return mp_recv_usb(d, 1, buf);
-    }
-
-    return FALSE;
+    return mp_write_usb_with_response(d, 3, buf, 1, buf);
 }
 
 /**
@@ -347,16 +402,16 @@ int mp_query_info(struct mp_handle_t *d) {
     // phandle is already assigned
 
     // First, get version info
-    debug_printf("Getting version info\n");
-    if((!mp_write_usb(d,2,"\0\0")) || (!mp_recv_usb(d, 2, buf)))
+    debug_printf("Getting version info");
+    if(!mp_write_usb_with_response(d, 2, "\0\0", 2, buf))
         return FALSE;
 
     d->fw_major = (int) buf[0];
     d->fw_minor = (int) buf[1];
 
     // Get board type info
-    debug_printf("Getting board info\n");
-    if((!mp_write_usb(d,2,"\x30\1")) || (!mp_recv_usb(d, 4, buf)))
+    debug_printf("Getting board info");
+    if(!mp_write_usb_with_response(d, 2, "\x30\1", 4, buf))
         return FALSE;
 
     d->board_id = (int) buf[0];
@@ -381,10 +436,10 @@ int mp_query_info(struct mp_handle_t *d) {
     d->i2c_devices = 0;
 
     // Get board specific info
-    debug_printf("Getting board specific info\n");
+    debug_printf("Getting board specific info");
     switch(d->board_id) {
     case BOARD_TYPE_POWER:
-        if((!mp_write_usb(d,2,"\x31\2")) || (!mp_recv_usb(d, 2, buf)))
+        if(!mp_write_usb_with_response(d, 2, "\x31\2", 2, buf))
             return FALSE;
         d->power.current = buf[0];
         d->power.devices = buf[1];
@@ -431,25 +486,32 @@ struct mp_handle_t *mp_create_handle(struct usb_device *device) {
     struct mp_handle_t *pnew;
     usb_dev_handle *phandle;
 
-    if((device->descriptor.idVendor != mp_vendorID) ||
-       (device->descriptor.idProduct != mp_productID)) {
+
+    debug_printf("Checking device 0x%04x:0x%04x", device->descriptor.idVendor,
+                 device->descriptor.idProduct);
+
+    if(((device->descriptor.idVendor != mp_vendorID) ||
+       (device->descriptor.idProduct != mp_productID)) &&
+       ((device->descriptor.idVendor != mp_vusb_vendorID) ||
+        (device->descriptor.idProduct != mp_vusb_productID))) {
+        debug_printf("Not valid");
         return NULL;
     }
 
     phandle = usb_open(device);
     if(!phandle) {
-        debug_printf("Error in usb_open\n");
+        debug_printf("Error in usb_open");
         return NULL;
     }
 
     if(usb_set_configuration(phandle, mp_configuration) < 0) {
-        debug_printf("Error in set_configuration\n");
+        debug_printf("Error in set_configuration");
         usb_close(phandle);
         return NULL;
     }
 
     if (usb_claim_interface(phandle, mp_interface) < 0) {
-        debug_printf("Error in claim_interface\n");
+        debug_printf("Error in claim_interface");
         usb_close(phandle);
         return NULL;
     }
@@ -461,8 +523,15 @@ struct mp_handle_t *mp_create_handle(struct usb_device *device) {
         return NULL;
     }
 
+    if((device->descriptor.idVendor == mp_vendorID) &&
+       (device->descriptor.idProduct == mp_productID))
+        pnew->comm_protocol = COMM_PROTOCOL_PIC;
+    else
+        pnew->comm_protocol = COMM_PROTOCOL_VUSB;
+
     pnew->phandle = phandle;
     if(!mp_query_info(pnew)) {
+        debug_printf("Couldn't query info");
         mp_destroy_handle(pnew);
         return NULL;
     }
@@ -563,12 +632,12 @@ struct mp_handle_t *mp_open(int type, int id) {
            ((id == BOARD_SERIAL_ANY) || (id == pmp->serial))) {
 
             if(usb_set_configuration(pmp->phandle, mp_configuration) < 0) {
-                debug_printf("Error in set_configuration\n");
+                debug_printf("Error in set_configuration");
                 return NULL;
             }
 
             if (usb_claim_interface(pmp->phandle, mp_interface) < 0) {
-                debug_printf("Error in claim_interface\n");
+                debug_printf("Error in claim_interface");
                 return NULL;
             }
 

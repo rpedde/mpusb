@@ -34,6 +34,7 @@ struct mp_i2c_handle_t {
 struct mp_handle_t {
     struct usb_dev_handle *phandle;
 
+    int comm_protocol;
     int board_id;
     char *board_type;
 
@@ -57,21 +58,26 @@ struct mp_handle_t {
     struct mp_handle_t *pnext;
 };
 
+
+#define COMM_PROTOCOL_PIC    0x00
+#define COMM_PROTOCOL_VUSB   0x01
+
 #define BOARD_TYPE_ANY       0x00
 #define BOARD_TYPE_POWER     0x01
 #define BOARD_TYPE_I2C       0x02
-#define BOARD_TYPE_SERVO     0x03
-#define BOARD_TYPE_UNKNOWN   0x04
+#define BOARD_TYPE_UNKNOWN   0x03
 
 #define BOARD_SERIAL_ANY     0x00
 
 #define PROCESSOR_TYPE_2450    0x00
 #define PROCESSOR_TYPE_2550    0x01
-#define PROCESSOR_TYPE_UNKNOWN 0x02
+#define PROCESSOR_TYPE_A168    0x02
+#define PROCESSOR_TYPE_UNKNOWN 0x03
 
 #define I2C_16F690_BOOTLOADER  0x00
 #define I2C_HD44780            0x01
-#define I2C_UNKNOWN            0x02
+#define I2C_SERVO              0x03
+#define I2C_UNKNOWN            0x04
 
 #define I2C_LOW            0x08
 #define I2C_HIGH           0x77
