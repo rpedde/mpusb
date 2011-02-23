@@ -106,7 +106,6 @@ int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, u
 
 #define debug_printf(args...) mp_log(args)
 
-
 void mp_set_debug(int value) {
     mp_debug=value;
 }
