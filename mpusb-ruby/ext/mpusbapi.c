@@ -424,7 +424,6 @@ void Init_mpusbapi() {
     rb_define_const(cMPUSB, "BOARD_TYPE_ANY", INT2FIX(BOARD_TYPE_ANY));
     rb_define_const(cMPUSB, "BOARD_TYPE_POWER", INT2FIX(BOARD_TYPE_POWER));
     rb_define_const(cMPUSB, "BOARD_TYPE_I2C", INT2FIX(BOARD_TYPE_I2C));
-    rb_define_const(cMPUSB, "BOARD_TYPE_NEOGEO", INT2FIX(BOARD_TYPE_NEOGEO));
     rb_define_const(cMPUSB, "BOARD_TYPE_UNKNOWN", INT2FIX(BOARD_TYPE_UNKNOWN));
 
     rb_define_const(cMPUSB, "BOARD_SERIAL_ANY", INT2FIX(BOARD_SERIAL_ANY));
