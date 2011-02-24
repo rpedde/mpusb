@@ -77,7 +77,8 @@ struct mp_handle_t {
 #define I2C_16F690_BOOTLOADER  0x00
 #define I2C_HD44780            0x01
 #define I2C_SERVO              0x03
-#define I2C_UNKNOWN            0x04
+#define I2C_IO                 0x04
+#define I2C_UNKNOWN            0x05
 
 #define I2C_LOW            0x08
 #define I2C_HIGH           0x77

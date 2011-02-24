@@ -65,6 +65,7 @@ char *i2c_type[] = {
     "18F690 Boot Loader",
     "HD44780 LCD Panel",
     "Servo Controller",
+    "Generic 8-bit IO",
     "Unknown"
 };
 
