@@ -58,6 +58,7 @@ char *processor_type[] = {
     "18F2450",
     "18F2550",
     "ATmega168",
+    "Atmega88",
     "Unknown",
 };
 

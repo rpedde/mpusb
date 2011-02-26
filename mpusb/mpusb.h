@@ -72,7 +72,8 @@ struct mp_handle_t {
 #define PROCESSOR_TYPE_2450    0x00
 #define PROCESSOR_TYPE_2550    0x01
 #define PROCESSOR_TYPE_A168    0x02
-#define PROCESSOR_TYPE_UNKNOWN 0x03
+#define PROCESSOR_TYPE_A88     0x03
+#define PROCESSOR_TYPE_UNKNOWN 0x04
 
 #define I2C_16F690_BOOTLOADER  0x00
 #define I2C_HD44780            0x01
