@@ -573,12 +573,12 @@ int mp_list(void) {
 
     while(pmp) {
         if(!found) {
-            printf("\nSerial   Firmware     Proc   Mhz EEPROM  Type\n");
+            printf("\n%-8s %-10s %-10s %-6s %-7s %-5s\n","Serial", "Firmware", "Proc", "MHz", "EEPROM", "Type");
             printf("----------------------------------------------"
                    "-----------------\n");
             found = 1;
         }
-        printf("%04d       %d.%02d  %-8s   %-3d   %s  %s\n",
+        printf("%04d    %2d.%02d       %-8s   %-3d   %-3s      %s\n",
                pmp->serial,
                pmp->fw_major,
                pmp->fw_minor,
