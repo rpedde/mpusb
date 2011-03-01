@@ -170,6 +170,7 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
  */
 int mp_write_vusb_with_response(struct mp_handle_t *d, int len, char *src, int dlen, char *dst) {
     int cnt;
+    int index;
 
     cnt = usb_control_msg(d->phandle,USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
                           VENDOR_RQ_WRITE_BUFFER, 0, 0, src, len, 5000);
@@ -185,6 +186,11 @@ int mp_write_vusb_with_response(struct mp_handle_t *d, int len, char *src, int d
         if(cnt < 0) {
             fprintf(stderr, "Error on read buffer: %s\n", usb_strerror());
             return FALSE;
+        }
+
+        debug_printf("read %i bytes", cnt);
+        for(index = 0; index < cnt; index++) {
+            debug_printf("0x%02x ",(unsigned char)dst[index]);
         }
 
         if(cnt != dlen) {
