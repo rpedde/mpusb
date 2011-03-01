@@ -34,16 +34,6 @@
 #include "main.h"
 #include "mpusb.h"
 
-#define CMD_READ_VERSION   0x00
-#define CMD_READ_EEPROM    0x01
-#define CMD_WRITE_EEPROM   0x02
-#define CMD_BOARD_TYPE     0x30
-#define CMD_BD_POWER_INFO  0x31
-#define CMD_BD_POWER_STATE 0x32
-#define CMD_I2C_READ       0x40
-#define CMD_I2C_WRITE      0x41
-#define CMD_RESET          0xFF
-
 #define VENDOR_RQ_WRITE_BUFFER 0x00
 #define VENDOR_RQ_READ_BUFFER  0x01
 
@@ -323,7 +313,7 @@ int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *ret
     if(!d->has_eeprom)
         return FALSE;
 
-    buf[0] = CMD_READ_EEPROM;
+    buf[0] = CMD_READ_EEDATA;
     buf[1] = 1;
     buf[2] = addr;
 
@@ -346,7 +336,7 @@ int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char val
     if(!d->has_eeprom)
         return FALSE;
 
-    buf[0] = CMD_WRITE_EEPROM;
+    buf[0] = CMD_WRITE_EEDATA;
     buf[1] = 2;
     buf[2] = addr;
     buf[3] = value;
@@ -578,13 +568,13 @@ int mp_list(void) {
                    "-----------------\n");
             found = 1;
         }
-        printf("%04d    %2d.%02d       %-8s   %-3d   %-3s      %s\n",
+        printf("%04d    %2d.%02d       %-8s   %-3d    %-3s     %s\n",
                pmp->serial,
                pmp->fw_major,
                pmp->fw_minor,
                pmp->processor_type,
                pmp->processor_speed,
-               pmp->has_eeprom ? "Yes" : " No",
+               pmp->has_eeprom ? "Yes" : "No",
                pmp->board_type);
 
         switch(pmp->board_id) {

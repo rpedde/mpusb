@@ -120,4 +120,143 @@ extern int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char 
 extern int mp_i2c_default_min(int min);
 extern int mp_i2c_default_max(int max);
 
+/* request and response objects */
+
+#define CMD_READ_VERSION   0x00
+#define CMD_READ_EEDATA    0x01
+#define CMD_WRITE_EEDATA   0x02
+#define CMD_BOARD_TYPE     0x30
+#define CMD_BD_POWER_INFO  0x31
+#define CMD_BD_POWER_STATE 0x32
+#define CMD_I2C_READ       0x40
+#define CMD_I2C_WRITE      0x41
+#define CMD_RESET          0xFF
+
+/* return value from I2C commands */
+#define I2C_E_SUCCESS      0x00  /* Success */
+#define I2C_E_NODEV        0x01  /* Invalid device */
+#define I2C_E_NOACK        0x02  /* Protocol error.  Missing ACK */
+#define I2C_E_TIMEOUT      0x03  /* Timeout */
+#define I2C_E_STRETCH      0x04  /* Clock stretch error */
+#define I2C_E_OTHER        0x05  /* Unknown */
+#define I2C_E_LAST         0x06
+
+
+#define PACKED __attribute__((aligned(8)))
+
+/* these will get cleaned up later */
+
+/* CMD_READ_VERSION */
+typedef struct usb_cmd_read_version_t {
+    uint8_t cmd; /* CMD_READ_VERSION */
+    uint8_t len; /* length of remaining buffer (0) */
+} usb_cmd_read_version_t PACKED;
+
+typedef struct usb_response_read_version_t {
+    uint8_t version_major;
+    uint8_t version_minor;
+} usb_response_read_version_t PACKED;
+
+/* CMD_READ_EEDATA */
+typedef struct usb_cmd_read_eedata_t {
+    uint8_t cmd; /* CMD_READ_EEDATA */
+    uint8_t len; /* length of remaining buffer (1) */
+    uint8_t addr;
+} usb_cmd_read_eedata_t PACKED;
+
+typedef struct usb_response_read_eedata_t {
+    uint8_t value;
+    uint8_t addr; /* seriously, this is inexplicable */
+} usb_response_read_eedata_t PACKED;
+
+/* CMD_WRITE_EEDATA */
+typedef struct usb_cmd_write_eedata_t {
+    uint8_t cmd; /* CMD_WRITE_EEDATA */
+    uint8_t len; /* length of remaining buffer (2) */
+    uint8_t addr;
+    uint8_t value;
+} usb_cmd_write_eedata_t PACKED;
+
+typedef struct usb_response_write_eedata_t {
+    uint8_t result; /* 1 on success, 0 on failure */
+    uint8_t len;
+    uint8_t addr;
+    uint8_t value;  /* you can't make this stuff up */
+} usb_response_write_eedata_t PACKED;
+
+/* CMD_BOARD_TYPE */
+typedef struct usb_cmd_board_type_t {
+    uint8_t cmd; /* CMD_BOARD_TYPE */
+    uint8_t len; /* 0 */
+} usb_cmd_board_type_t PACKED;
+
+typedef struct usb_response_board_type_t {
+    uint8_t board_type; /* BOARD_TYPE_* */
+    uint8_t serial;     /* for identification */
+    uint8_t proc_type;  /* PROCESSOR_TYPE_* */
+    uint8_t mhz;        /* processor MHz */
+} usb_response_board_type_t PACKED;
+
+/* CMD_BD_POWER_INFO - BOARD_TYPE_POWER only */
+typedef struct usb_cmd_power_info_t {
+    uint8_t cmd; /* CMD_BD_POWER_INFO */
+    uint8_t len; /* 2 (?!?!?!) */
+} usb_cmd_power_info_t PACKED;
+
+typedef struct usb_response_power_info_t {
+    uint8_t current; /* amps */
+    uint8_t devices; /* controlled devices */
+} usb_response_power_info_t PACKED;
+
+/* CMD_BD_POWER_STATE - BOARD_TYPE_POWER only */
+typedef struct usb_cmd_power_state_t {
+    uint8_t cmd; /* CMD_BD_POWER_STATE */
+    uint8_t device; /* which device, 0 based */
+    uint8_t state; /* 0 or 1 */
+} usb_cmd_power_state_t PACKED;
+
+typedef struct usb_response_power_state_t {
+    uint8_t result; /* 1 on success, 0 on failure */
+} usb_response_power_state_t PACKED;
+
+/* CMD_I2C_READ - BOARD_TYPE_I2C only */
+typedef struct usb_cmd_i2c_read_t {
+    uint8_t cmd; /* CMD_I2C_READ */
+    uint8_t len; /* 2 (?!?!?!) */
+    uint8_t device;
+    uint8_t address;
+    uint8_t read_len; /* bytes to read */
+} usb_cmd_i2c_read_t PACKED;
+
+/* on success... */
+typedef struct usb_response_i2c_read_t {
+    uint8_t result;
+    uint8_t *data;  /* read_len bytes.. */
+} usb_response_i2c_read_t PACKED;
+
+/* on failure, result = 0, *data = extended error code */
+
+/* CMD_I2C_WRITE - BOARD_TYPE_I2C only */
+typedef struct usb_cmd_i2c_write_t {
+    uint8_t cmd; /* CMD_I2C_READ */
+    uint8_t len; /* 2 + write_len */
+    uint8_t device;
+    uint8_t address;
+    uint8_t *data; /* write_len derived from len */
+} usb_cmd_i2c_write_t PACKED;
+
+typedef struct usb_response_i2c_write_t {
+    uint8_t result;
+    uint8_t extended_result;
+} usb_response_i2c_write_t PACKED;
+
+/* CMD_RESET */
+typedef struct usb_cmd_reset_t {
+    uint8_t cmd; /* CMD_RESET */
+} usb_cmd_reset_t PACKED;
+
+typedef struct usb_response_reset_t {
+    uint8_t result;
+} usb_response_reset_t PACKED;
+
 #endif /* __MPUSB_H__ */

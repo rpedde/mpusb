@@ -79,14 +79,6 @@ ACTION action_list[] = {
     { NULL, 0 }
 };
 
-#define I2C_E_SUCCESS 0
-#define I2C_E_NODEV   1
-#define I2C_E_NOACK   2
-#define I2C_E_TIMEOUT 3
-#define I2C_E_STRETCH 4
-#define I2C_E_OTHER   5
-#define I2C_E_LAST    6
-
 char *i2c_errors[] = {
     "Success",
     "Invalid device",
