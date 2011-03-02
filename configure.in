@@ -39,12 +39,12 @@ AC_ARG_WITH(usb-includes,
 	fi
 ])
 
-AC_CHECK_HEADERS(usb.h,,[
- AC_MSG_ERROR([usb.h not found... must have libusb installed])])
-AC_CHECK_LIB(usb,usb_init,,echo "Must have libusb installed";exit)
+MPUSB_CHECK_LIBUSB()
 
-AC_CHECK_HEADERS(readline/readline.h,,[
- AC_MSG_ERROR([readline.h not found... must have libreadline installed])])
-AC_CHECK_LIB(readline,readline,,echo "Must have libreadline installed";exit)
+echo "CFLAGS: $libusb_CFLAGS"
+echo "LIBS: $libusb_LIBS"
+
+CFLAGS="${CFLAGS} $libusb_CFLAGS"
+LDFLAGS="${LDFLAGS} $libusb_LIBS -lreadline"
 
 AC_OUTPUT(mpusb/Makefile Makefile)

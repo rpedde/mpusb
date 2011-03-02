@@ -32,7 +32,7 @@ struct mp_i2c_handle_t {
 };
 
 struct mp_handle_t {
-    struct usb_dev_handle *phandle;
+    struct libusb_device_handle *phandle;
 
     int comm_protocol;
     int board_id;

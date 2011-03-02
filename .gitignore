@@ -24,3 +24,4 @@ missing
 *.lo
 stamp-h1
 mpusb/mpusb
+aclocal.m4

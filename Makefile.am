@@ -1,6 +1,7 @@
 # 
 #
 #EXTRA_DIST = configure CREDITS
+ACLOCAL_AMFLAGS=-I m4
 SUBDIRS=mpusb
 
 

@@ -26,9 +26,10 @@
  * by Ron Pedde <ron@pedde.com>
  */
 
-#include <usb.h> /* libusb header */
+#include <libusb.h>
 #include <unistd.h> /* for geteuid */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include "main.h"
@@ -60,6 +61,7 @@ char *i2c_type[] = {
     "Unknown"
 };
 
+static struct libusb_context *mp_ctx;
 static struct mp_handle_t devicelist;
 
 const static int mp_vendorID=0x04d8; // Microchip, Inc
@@ -88,7 +90,7 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src);
 int mp_write_usb_with_response(struct mp_handle_t *d, int len, char *src, int dlen, char *dst);
 
 int mp_query_info(struct mp_handle_t *d);
-struct mp_handle_t *mp_create_handle(struct usb_device *handle);
+struct mp_handle_t *mp_create_handle(struct libusb_device *handle);
 void mp_release_handle(struct mp_handle_t *ph);
 void mp_destroy_handle(struct mp_handle_t *ph);
 int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *retval);
@@ -123,7 +125,11 @@ int mp_recv_usb(struct mp_handle_t *d, int len, char *dest) {
     int r;
     int index;
 
-    r=usb_bulk_read(d->phandle, mp_endpoint_out, dest, len, mp_timeout);
+    if(libusb_bulk_transfer(d->phandle, mp_endpoint_out,
+                            (unsigned char *)dest, len, &r, mp_timeout) != 0) {
+        debug_printf("Error receiving data");
+        return FALSE;
+    }
 
     debug_printf("read %i bytes", r);
     for(index = 0; index < r; index++) {
@@ -133,7 +139,8 @@ int mp_recv_usb(struct mp_handle_t *d, int len, char *dest) {
 
     if (r!=len) {
         fprintf(stderr,"Expecting to read %d bytes -- read %d\n",len, r);
-        fprintf(stderr,"%s",usb_strerror());
+        // FIXME:
+        //        fprintf(stderr,"%s",usb_strerror());
         return FALSE;
     }
     return TRUE;
@@ -146,7 +153,11 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
     int r;
     int index;
 
-    r = usb_bulk_write(d->phandle, mp_endpoint_in, src, len, mp_timeout);
+    if(libusb_bulk_transfer(d->phandle, mp_endpoint_in, (unsigned char *)src,
+                            len, &r, mp_timeout) != 0) {
+        debug_printf("Error writing data");
+        return FALSE;
+    }
 
     debug_printf("wrote %d bytes",r);
     for(index = 0; index < r; index++) {
@@ -155,7 +166,8 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
 
     if(r != len) {
         fprintf(stderr,"Wanted to write %d bytes -- wrote %d\n",len, r);
-        fprintf(stderr,"%s",usb_strerror());
+        // FIXME:
+        //        fprintf(stderr,"%s",usb_strerror());
         return FALSE;
     }
 
@@ -172,30 +184,35 @@ int mp_write_vusb_with_response(struct mp_handle_t *d, int len, char *src, int d
     int cnt;
     int index;
 
-    cnt = usb_control_msg(d->phandle,USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
-                          VENDOR_RQ_WRITE_BUFFER, 0, 0, src, len, 5000);
-
-    if(cnt < 0) {
-        fprintf(stderr, "Error on write buffer: %s\n", usb_strerror());
+    cnt = libusb_control_transfer(d->phandle,
+                                  LIBUSB_REQUEST_TYPE_VENDOR |
+                                  LIBUSB_RECIPIENT_DEVICE |
+                                  LIBUSB_ENDPOINT_OUT,
+                                  VENDOR_RQ_WRITE_BUFFER,
+                                  0, 0, (unsigned char *)src, len, 5000);
+    if(cnt < len) {
+        /* FIXME: better error */
+        fprintf(stderr, "Error on outbound control transfer");
         return FALSE;
     }
 
     if(dlen) {
-        cnt = usb_control_msg(d->phandle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN,
-                              VENDOR_RQ_READ_BUFFER, 0, 0, dst, dlen, 5000);
-        if(cnt < 0) {
-            fprintf(stderr, "Error on read buffer: %s\n", usb_strerror());
+        cnt = libusb_control_transfer(d->phandle,
+                                      LIBUSB_REQUEST_TYPE_VENDOR |
+                                      LIBUSB_RECIPIENT_DEVICE |
+                                      LIBUSB_ENDPOINT_IN,
+                                      VENDOR_RQ_READ_BUFFER,
+                                      0, 0, (unsigned char *)dst, dlen, 5000);
+
+        if(cnt != dlen) {
+            /* FIXME: better error */
+            fprintf(stderr, "Error on read buffer");
             return FALSE;
         }
 
         debug_printf("read %i bytes", cnt);
         for(index = 0; index < cnt; index++) {
             debug_printf("0x%02x ",(unsigned char)dst[index]);
-        }
-
-        if(cnt != dlen) {
-            fprintf(stderr, "Short read.  Expecting %d, got %d\n", dlen, cnt);
-            return FALSE;
         }
     }
 
@@ -479,49 +496,53 @@ int mp_query_info(struct mp_handle_t *d) {
 /*
  * create a new handle, given a usb device
  */
-struct mp_handle_t *mp_create_handle(struct usb_device *device) {
+struct mp_handle_t *mp_create_handle(struct libusb_device *device) {
     struct mp_handle_t *pnew;
-    usb_dev_handle *phandle;
+    libusb_device_handle *phandle;
+    struct libusb_device_descriptor descriptor;
 
+    if(libusb_get_device_descriptor(device, &descriptor) != 0) {
+        /* FIXME: Proper error */
+        return NULL;
+    }
 
-    debug_printf("Checking device 0x%04x:0x%04x", device->descriptor.idVendor,
-                 device->descriptor.idProduct);
+    debug_printf("Checking device 0x%04x:0x%04x", descriptor.idVendor,
+                 descriptor.idProduct);
 
-    if(((device->descriptor.idVendor != mp_vendorID) ||
-       (device->descriptor.idProduct != mp_productID)) &&
-       ((device->descriptor.idVendor != mp_vusb_vendorID) ||
-        (device->descriptor.idProduct != mp_vusb_productID))) {
+    if(((descriptor.idVendor != mp_vendorID) ||
+       (descriptor.idProduct != mp_productID)) &&
+       ((descriptor.idVendor != mp_vusb_vendorID) ||
+        (descriptor.idProduct != mp_vusb_productID))) {
         debug_printf("Not valid");
         return NULL;
     }
 
-    phandle = usb_open(device);
-    if(!phandle) {
-        debug_printf("Error in usb_open");
+    if(libusb_open(device, &phandle) != 0) {
+        debug_printf("Couldn't open device");
         return NULL;
     }
 
-    if(usb_set_configuration(phandle, mp_configuration) < 0) {
+    if(libusb_set_configuration(phandle, mp_configuration) != 0) {
         debug_printf("Error in set_configuration");
-        usb_close(phandle);
+        libusb_close(phandle);
         return NULL;
     }
 
-    if (usb_claim_interface(phandle, mp_interface) < 0) {
+    if (libusb_claim_interface(phandle, mp_interface) != 0) {
         debug_printf("Error in claim_interface");
-        usb_close(phandle);
+        libusb_close(phandle);
         return NULL;
     }
 
     pnew = (struct mp_handle_t *)malloc(sizeof(struct mp_handle_t));
     if(!pnew) {
-        usb_release_interface(phandle, mp_interface);
-        usb_close(phandle);
+        libusb_release_interface(phandle, mp_interface);
+        libusb_close(phandle);
         return NULL;
     }
 
-    if((device->descriptor.idVendor == mp_vendorID) &&
-       (device->descriptor.idProduct == mp_productID))
+    if((descriptor.idVendor == mp_vendorID) &&
+       (descriptor.idProduct == mp_productID))
         pnew->comm_protocol = COMM_PROTOCOL_PIC;
     else
         pnew->comm_protocol = COMM_PROTOCOL_VUSB;
@@ -536,14 +557,13 @@ struct mp_handle_t *mp_create_handle(struct usb_device *device) {
     return pnew;
 }
 
-
 /*
  * destroy a previously allocated mp handle
  */
 void mp_destroy_handle(struct mp_handle_t *ph) {
-    usb_reset(ph->phandle);
-    usb_release_interface(ph->phandle, mp_interface);
-    usb_close(ph->phandle);
+    libusb_reset_device(ph->phandle);
+    libusb_release_interface(ph->phandle, mp_interface);
+    libusb_close(ph->phandle);
 
     /* FIXME: Walk the i2c devices */
     free(ph);
@@ -553,8 +573,8 @@ void mp_destroy_handle(struct mp_handle_t *ph) {
  * release a handle
  */
 void mp_release_handle(struct mp_handle_t *ph) {
-    usb_reset(ph->phandle);
-    usb_release_interface(ph->phandle, mp_interface);
+    libusb_reset_device(ph->phandle);
+    libusb_release_interface(ph->phandle, mp_interface);
 }
 
 /*
@@ -628,12 +648,12 @@ struct mp_handle_t *mp_open(int type, int id) {
         if(((pmp->board_id == type) || (type == BOARD_TYPE_ANY)) &&
            ((id == BOARD_SERIAL_ANY) || (id == pmp->serial))) {
 
-            if(usb_set_configuration(pmp->phandle, mp_configuration) < 0) {
+            if(libusb_set_configuration(pmp->phandle, mp_configuration) != 0) {
                 debug_printf("Error in set_configuration");
                 return NULL;
             }
 
-            if (usb_claim_interface(pmp->phandle, mp_interface) < 0) {
+            if (libusb_claim_interface(pmp->phandle, mp_interface) != 0) {
                 debug_printf("Error in claim_interface");
                 return NULL;
             }
@@ -650,8 +670,6 @@ struct mp_handle_t *mp_devicelist(void) {
 }
 
 int mp_init(void) {
-    struct usb_device *device;
-    struct usb_bus* bus;
     struct mp_handle_t *pmp;
 
     devicelist.pnext = NULL;
@@ -671,21 +689,30 @@ int mp_init(void) {
     //           mp_vendorID,mp_productID);
 
     /* (libusb setup code stolen from John Fremlin's cool "usb-robot") -osl */
-    usb_init();
-    usb_find_busses();
-    usb_find_devices();
 
-    for (bus=usb_get_busses();bus!=NULL;bus=bus->next) {
-        struct usb_device* usb_devices = bus->devices;
-        for(device=usb_devices;device!=NULL;device=device->next) {
-            pmp = mp_create_handle(device);
-            if(pmp) {
-                pmp->pnext = devicelist.pnext;
-                devicelist.pnext = pmp;
-                mp_release_handle(pmp);
-            }
+    if(libusb_init(&mp_ctx)) {
+        /* FIXME: emit proper error */
+        return FALSE;
+    }
+
+    libusb_device **list;
+    ssize_t cnt = libusb_get_device_list(NULL, &list);
+    ssize_t i = 0;
+
+    if(cnt < 0)
+        return FALSE;
+
+    for(i = 0; i < cnt; i++) {
+        libusb_device *device = list[i];
+        pmp = mp_create_handle(device);
+        if(pmp) {
+            pmp->pnext = devicelist.pnext;
+            devicelist.pnext = pmp;
+            mp_release_handle(pmp);
         }
     }
+
+    libusb_free_device_list(list,1);
     return TRUE;
 }
 
@@ -703,5 +730,5 @@ void mp_deinit(void) {
         pmp = devicelist.pnext;
     }
 
-    // no usb_deinit();
+    libusb_exit(mp_ctx);
 }

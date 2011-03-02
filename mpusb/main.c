@@ -18,7 +18,7 @@
  */
 
 
-#include <usb.h> /* libusb header */
+#include <libusb.h> /* libusb header */
 #include <unistd.h> /* for geteuid */
 
 #include <stdio.h>
