@@ -37,6 +37,7 @@ int handler_list(struct mp_handle_t *d, int action, int argc, char **argv);
 int handler_eeprom(struct mp_handle_t *d, int action, int argc, char **argv);
 int handler_i2c(struct mp_handle_t *d, int action, int argc, char **argv);
 int handler_help(struct mp_handle_t *d, int action, int argc, char **argv);
+int handler_cb(struct mp_handle_t *d, int action, int argc, char **argv);
 
 /* Usage forwards */
 void usage_power(void);
@@ -44,6 +45,7 @@ void usage_list(void);
 void usage_eeprom(void);
 void usage_i2c(void);
 void usage_help(void);
+void usage_cb(void);
 
 /* Other forwards */
 void show_usage(void);
@@ -71,6 +73,7 @@ int interactive = 0;
 #define ACTION_HELP         4
 
 ACTION action_list[] = {
+    { "callback",    BOARD_TYPE_ANY,   1, handler_cb,     usage_cb },
     { "list",        BOARD_TYPE_ANY,   0, handler_list,   usage_list },
     { "power",       BOARD_TYPE_POWER, 1, handler_power,  usage_power },
     { "eeprom",      BOARD_TYPE_ANY,   1, handler_eeprom, usage_eeprom },
@@ -109,6 +112,11 @@ char *xstrdup(char *str) {
     }
 
     return result;
+}
+
+void usage_cb(void) {
+    printf("callback\n");
+    printf("Register to listen for callback events");
 }
 
 void usage_power(void) {
@@ -157,6 +165,16 @@ int get_action(char *action) {
 
     return -1;
 }
+
+int handler_cb(struct mp_handle_t *d, int action, int argc, char **argv) {
+    if(!mp_async_callback(d, NULL)) {
+        fprintf(stderr, "Can't register callback\n");
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
 
 int handler_help(struct mp_handle_t *d, int action, int argc, char **argv) {
     int help_action;
@@ -447,6 +465,8 @@ int main(int argc, char *argv[]) {
     printf("Monkey Puppet Labs USB interface.  Version %d.%02d\n", VERSION_MAJOR, VERSION_MINOR);
     printf("Copyright (c) 2008 Monkey Puppet Labs.  All rights reserved.\n\n");
 
+    mp_set_debug(1);
+
     while((option = getopt(argc, argv, "+s:hid")) != -1) {
         switch(option) {
         case 's':
@@ -459,7 +479,7 @@ int main(int argc, char *argv[]) {
             interactive = 1;
             break;
         case 'd':
-            mp_set_debug(1);
+            mp_set_debug(5);
             break;
         default:
             show_usage();

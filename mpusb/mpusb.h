@@ -120,6 +120,11 @@ extern int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char 
 extern int mp_i2c_default_min(int min);
 extern int mp_i2c_default_max(int max);
 
+typedef void(*callback_function)(int len, char *data);
+
+/* Async handling */
+extern int mp_async_callback(struct mp_handle_t *d, callback_function cb);
+
 /* request and response objects */
 
 #define CMD_READ_VERSION   0x00

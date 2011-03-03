@@ -6,7 +6,7 @@ lib_LTLIBRARIES = libmpusb.la
 mpusb_SOURCES = main.c main.h
 mpusb_LDADD = libmpusb.la
 
-libmpusb_la_SOURCES = mpusb.c mpusb.h
+libmpusb_la_SOURCES = mpusb.c mpusb.h debug.c debug.h
 
 
 library_includedir=$(includedir)/mpusb
