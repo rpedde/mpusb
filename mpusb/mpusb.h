@@ -59,15 +59,15 @@ struct mp_handle_t {
 };
 
 
-#define COMM_PROTOCOL_PIC    0x00
-#define COMM_PROTOCOL_VUSB   0x01
+#define COMM_PROTOCOL_PIC      0x00
+#define COMM_PROTOCOL_VUSB     0x01
 
-#define BOARD_TYPE_ANY       0x00
-#define BOARD_TYPE_POWER     0x01
-#define BOARD_TYPE_I2C       0x02
-#define BOARD_TYPE_UNKNOWN   0x03
+#define BOARD_TYPE_ANY         0x00
+#define BOARD_TYPE_POWER       0x01
+#define BOARD_TYPE_I2C         0x02
+#define BOARD_TYPE_UNKNOWN     0x03
 
-#define BOARD_SERIAL_ANY     0x00
+#define BOARD_SERIAL_ANY       0x00
 
 #define PROCESSOR_TYPE_2450    0x00
 #define PROCESSOR_TYPE_2550    0x01
@@ -81,9 +81,11 @@ struct mp_handle_t {
 #define I2C_IO                 0x03
 #define I2C_UNKNOWN            0x04
 
-#define I2C_LOW            0x08
-#define I2C_HIGH           0x77
+#define I2C_LOW                0x08
+#define I2C_HIGH               0x77
 
+#define CB_TYPE_I2C            0x00
+#define CB_TYPE_USB            0x01
 
 #ifndef TRUE
 # define TRUE 1
