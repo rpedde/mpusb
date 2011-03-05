@@ -23,6 +23,8 @@
 
 #include <stdint.h>
 
+typedef void(*callback_function)(int type, int len, char *data);
+
 struct mp_i2c_handle_t {
     int device;
     int mpusb;
@@ -54,6 +56,9 @@ struct mp_handle_t {
     struct {
         int devices;
     } genio;
+
+    callback_function cb;
+
     struct mp_i2c_handle_t i2c_list;
     struct mp_handle_t *pnext;
 };
@@ -121,8 +126,6 @@ extern int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char a
 extern int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
 extern int mp_i2c_default_min(int min);
 extern int mp_i2c_default_max(int max);
-
-typedef void(*callback_function)(int len, char *data);
 
 /* Async handling */
 extern int mp_async_callback(struct mp_handle_t *d, callback_function cb);

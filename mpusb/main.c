@@ -30,6 +30,7 @@
 
 #include <mpusb/mpusb.h>
 #include "main.h"
+#include "debug.h"
 
 /* Handler forwards */
 int handler_power(struct mp_handle_t *d, int action, int argc, char **argv);
@@ -166,8 +167,57 @@ int get_action(char *action) {
     return -1;
 }
 
+void hexdump(unsigned char *block, int len) {
+    char charmap[256];
+    int index;
+    int row, offset;
+    char output[80];
+    char tmp[20];
+
+    memset(charmap,'.',sizeof(charmap));
+
+    for(index=' ';index<'~';index++) charmap[index]=index;
+    for(row=0;row<(len+15)/16;row++) {
+        sprintf(output,"%04X: ",row*16);
+        for(offset=0; offset < 16; offset++) {
+            if(row * 16 + offset < len) {
+                sprintf(tmp,"%02X ",block[row*16 + offset]);
+            } else {
+                sprintf(tmp,"   ");
+            }
+            strcat(output,tmp);
+        }
+
+        for(offset=0; offset < 16; offset++) {
+            if(row * 16 + offset < len) {
+                sprintf(tmp,"%c",charmap[block[row*16 + offset]]);
+            } else {
+                sprintf(tmp," ");
+            }
+            strcat(output,tmp);
+        }
+
+        DEBUG("%s\n",output);
+    }
+}
+
+void generic_callback_handler(int type, int len, char *data) {
+    switch(type) {
+    case CB_TYPE_I2C:
+        DEBUG("\nI2C Callback (Device %d):\n", data[0]);
+        break;
+    case CB_TYPE_USB:
+        DEBUG("\nUSB Callback:\n");
+        break;
+    default:
+        break;
+    }
+
+    hexdump((unsigned char *)&data[1], len - 1);
+}
+
 int handler_cb(struct mp_handle_t *d, int action, int argc, char **argv) {
-    if(!mp_async_callback(d, NULL)) {
+    if(!mp_async_callback(d, generic_callback_handler)) {
         fprintf(stderr, "Can't register callback\n");
         return FALSE;
     }

@@ -126,14 +126,21 @@ void *mp_async_proc(void *arg) {
 
 void mp_irq_callback(struct libusb_transfer *xfer) {
     int err;
+    struct mp_handle_t *phandle;
+
+    phandle = (struct mp_handle_t*)xfer->user_data;
 
     if(xfer->status == LIBUSB_TRANSFER_COMPLETED) {
         DEBUG("Length: %d", xfer->actual_length);
     }
 
+    if(xfer->actual_length) {
+        phandle->cb(xfer->buffer[0], xfer->actual_length - 1,
+                    (char*)&xfer->buffer[1]);
+    }
+
     if((err = libusb_submit_transfer(xfer)) != 0) {
         ERROR("Error submitting transfer: %d", err);
-        return FALSE;
     }
 }
 
@@ -162,6 +169,14 @@ int mp_async_callback(struct mp_handle_t *d, callback_function cb) {
             return FALSE;
         }
     }
+
+    if(d->cb) {
+        ERROR("Device already has callback registered");
+        pthread_mutex_unlock(&mp_async_mutex);
+        return FALSE;
+    }
+
+    d->cb = cb;
     pthread_mutex_unlock(&mp_async_mutex);
 
 
