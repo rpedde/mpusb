@@ -79,8 +79,8 @@ const static int mp_bootloaderID=0x000b; // when in bootloader mode
 const static int mp_configuration=1; /* 1: default config */
 
 const static int mp_interface=0;
-const static int mp_endpoint_in=1;
-const static int mp_endpoint_out=1;
+const static int mp_endpoint_in=0x81;
+const static int mp_endpoint_out=0x01;
 const static int mp_timeout=1000; /* timeout in ms */
 
 static int mp_i2c_min = I2C_LOW;
@@ -209,7 +209,7 @@ int mp_recv_usb(struct mp_handle_t *d, int len, char *dest) {
     int r;
     int index;
 
-    if(libusb_bulk_transfer(d->phandle, mp_endpoint_out,
+    if(libusb_bulk_transfer(d->phandle, mp_endpoint_in,
                             (unsigned char *)dest, len, &r, mp_timeout) != 0) {
         ERROR("Error receiving data");
         return FALSE;
@@ -236,7 +236,7 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
     int r;
     int index;
 
-    if(libusb_bulk_transfer(d->phandle, mp_endpoint_in, (unsigned char *)src,
+    if(libusb_bulk_transfer(d->phandle, mp_endpoint_out, (unsigned char *)src,
                             len, &r, mp_timeout) != 0) {
         DEBUG("Error writing data");
         return FALSE;
