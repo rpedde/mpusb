@@ -87,7 +87,7 @@ static int mp_i2c_min = I2C_LOW;
 static int mp_i2c_max = I2C_HIGH;
 
 static pthread_mutex_t mp_async_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_t mp_async_tid = NULL;
+static pthread_t mp_async_tid=NULL;
 
 /* Forwards */
 void mp_set_debug(int value);
@@ -754,6 +754,7 @@ struct mp_handle_t *mp_devicelist(void) {
 
 int mp_init(void) {
     struct mp_handle_t *pmp;
+    int err;
 
     devicelist.pnext = NULL;
 
@@ -764,28 +765,35 @@ int mp_init(void) {
     }
 #endif
 
-#ifdef USB_DEBUG
-    usb_debug=4;
-#endif
-
     //    printf("Locating Monkey Puppet Labs USB device (vendor 0x%04x/product 0x%04x)\n",
     //           mp_vendorID,mp_productID);
 
     /* (libusb setup code stolen from John Fremlin's cool "usb-robot") -osl */
 
-    if(libusb_init(&mp_ctx)) {
+    DEBUG("Initializing libusb");
+
+    if((err = libusb_init(&mp_ctx))) {
         /* FIXME: emit proper error */
+        fprintf(stderr,"Error initializing libusb: %s\n", libusb_error_name(err));
         return FALSE;
     }
 
+    libusb_set_debug(mp_ctx, 3);
+
+    DEBUG("Enumerating USB bus");
+
     libusb_device **list;
-    ssize_t cnt = libusb_get_device_list(NULL, &list);
+    ssize_t cnt = libusb_get_device_list(mp_ctx, &list);
     ssize_t i = 0;
 
-    if(cnt < 0)
+    if(cnt < 0) {
+        DEBUG("No usb devices found");
         return FALSE;
+    }
 
     for(i = 0; i < cnt; i++) {
+        DEBUG("Checking device %d", i);
+
         libusb_device *device = list[i];
         pmp = mp_create_handle(device);
         if(pmp) {
@@ -795,6 +803,7 @@ int mp_init(void) {
         }
     }
 
+    DEBUG("Done");
     libusb_free_device_list(list,1);
     return TRUE;
 }
