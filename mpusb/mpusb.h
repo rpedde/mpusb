@@ -28,15 +28,21 @@ typedef void(*callback_function)(int type, int len, char *data);
 struct mp_i2c_handle_t {
     int device;
     int mpusb;
-    int i2c_id;
-    char *i2c_type;
+    uint8_t i2c_id;
     struct mp_i2c_handle_t *pnext;
 };
 
 struct mp_handle_t {
+    char *device_path;
+    void *transport_info;
+    void *driver_info;
+    int queried;
+    int handle_locked;
+
     struct libusb_device_handle *phandle;
 
     int comm_protocol;
+
     int board_id;
     char *board_type;
 
@@ -108,22 +114,24 @@ extern char *processor_type[];
 extern int mp_init(void);
 extern void mp_deinit(void);
 
-extern struct mp_handle_t *mp_open(int type, int id);
+extern struct mp_handle_t *mp_open(uint8_t type, uint8_t id);
 extern void mp_close(struct mp_handle_t *d);
 extern int mp_list(void);
 extern struct mp_handle_t *mp_devicelist(void);
 extern void mp_set_debug(int value);
 
 /* Power functions */
-extern int mp_power_set(struct mp_handle_t *d, int state);
+extern int mp_power_set(struct mp_handle_t *d, uint8_t state);
 
 /* EEProm functions */
-extern int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *retval);
-extern int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char value);
+extern int mp_read_eeprom(struct mp_handle_t *d, uint8_t addr, uint8_t *retval);
+extern int mp_write_eeprom(struct mp_handle_t *d, uint8_t addr, uint8_t value);
 
 /* i2c functions */
-extern int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
-extern int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data);
+extern int mp_i2c_read(struct mp_handle_t *d, uint8_t dev, uint8_t addr,
+                       uint8_t len, uint8_t *data);
+extern int mp_i2c_write(struct mp_handle_t *d, uint8_t dev, uint8_t addr,
+                        uint8_t len, uint8_t *data);
 extern int mp_i2c_default_min(int min);
 extern int mp_i2c_default_max(int max);
 
@@ -249,7 +257,7 @@ typedef struct usb_response_i2c_read_t {
 /* CMD_I2C_WRITE - BOARD_TYPE_I2C only */
 typedef struct usb_cmd_i2c_write_t {
     uint8_t cmd; /* CMD_I2C_READ */
-    uint8_t len; /* 2 + write_len */
+    uint8_t len; /* 2 + write_len (includes dev and address ) */
     uint8_t device;
     uint8_t address;
     uint8_t *data; /* write_len derived from len */

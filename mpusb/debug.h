@@ -10,12 +10,14 @@
 #define DBG_WARN  2
 #define DBG_INFO  3
 #define DBG_DEBUG 4
+#define DBG_SPAM  5
 
 #define DBG_OUTPUT_SYSLOG 0
 #define DBG_OUTPUT_STDERR 1
 
 #if defined(NDEBUG)
 
+#define SPAM(format, args...)
 #define DEBUG(format, args...)
 #define INFO(format, args...)
 #define WARN(format, args...)
@@ -26,6 +28,7 @@
 
 #else
 
+#define SPAM(format, args...) debug_printf(DBG_SPAM, "[SPAM] %s:%d (%s): " format "\n", __FILE__, __LINE__, __FUNCTION__, ##args)
 #define DEBUG(format, args...) debug_printf(DBG_DEBUG, "[DEBUG] %s:%d (%s): " format "\n", __FILE__, __LINE__, __FUNCTION__, ##args)
 #define INFO(format, args...) debug_printf(DBG_INFO, "[INFO] %s:%d (%s): " format "\n", __FILE__, __LINE__, __FUNCTION__, ##args)
 #define WARN(format, args...) debug_printf(DBG_WARN, "[WARN] %s:%d (%s): " format "\n", __FILE__, __LINE__, __FUNCTION__, ##args)

@@ -11,7 +11,7 @@ dnl Checks for programs.
 AC_PROG_CC
 AC_PROG_LIBTOOL
 
-CPPFLAGS="${CPPFLAGS} -g -Wall"
+CPPFLAGS="${CPPFLAGS} -g -Wall -D_GNU_SOURCE"
 CFLAGS=""
 
 echo Host type is $host
@@ -19,24 +19,24 @@ CPPFLAGS="$CPPFLAGS -DHOST='\"$host\"'"
 
 case $host in
 *darwin*)
-	CPPFLAGS="$CPPFLAGS -no-cpp-precomp -DMAC"
-	LDFLAGS="$LDFLAGS -framework CoreFoundation"
+        CPPFLAGS="$CPPFLAGS -no-cpp-precomp -DMAC"
+        LDFLAGS="$LDFLAGS -framework CoreFoundation"
 esac
 
 AC_ARG_WITH(usb-libs,
-	[ --with-usb-libs[[=DIR]]              link to libusb in DIR],[
-	if test "$withval" != "no" -a "$withval" != "yes"; then
-	   Z_DIR=$withval
-	   LDFLAGS="${LDFLAGS} -L$withval -lusb"
-	fi
+        [ --with-usb-libs[[=DIR]]              link to libusb in DIR],[
+        if test "$withval" != "no" -a "$withval" != "yes"; then
+           Z_DIR=$withval
+           LDFLAGS="${LDFLAGS} -L$withval -lusb"
+        fi
 ])
 
 AC_ARG_WITH(usb-includes,
-	[ --with-usb-includes[[=DIR]]          link to libusb in DIR],[
-	if test "$withval" != "no" -a "$withval" != "yes"; then
-	   Z_DIR=$withval
-	   CPPFLAGS="${CPPFLAGS} -I$withval"
-	fi
+        [ --with-usb-includes[[=DIR]]          link to libusb in DIR],[
+        if test "$withval" != "no" -a "$withval" != "yes"; then
+           Z_DIR=$withval
+           CPPFLAGS="${CPPFLAGS} -I$withval"
+        fi
 ])
 
 MPUSB_CHECK_LIBUSB()

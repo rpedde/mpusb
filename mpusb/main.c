@@ -517,7 +517,7 @@ int main(int argc, char *argv[]) {
 
     mp_set_debug(1);
 
-    while((option = getopt(argc, argv, "+s:hid")) != -1) {
+    while((option = getopt(argc, argv, "+s:hid:")) != -1) {
         switch(option) {
         case 's':
             id =  atoi(optarg);
@@ -529,7 +529,7 @@ int main(int argc, char *argv[]) {
             interactive = 1;
             break;
         case 'd':
-            mp_set_debug(5);
+            mp_set_debug(atoi(optarg));
             break;
         default:
             show_usage();

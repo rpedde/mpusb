@@ -38,6 +38,8 @@
 #include "mpusb.h"
 #include "debug.h"
 
+#include "usb-transport.h"
+
 #define VENDOR_RQ_WRITE_BUFFER 0x00
 #define VENDOR_RQ_READ_BUFFER  0x01
 
@@ -89,6 +91,25 @@ static int mp_i2c_max = I2C_HIGH;
 static pthread_mutex_t mp_async_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t mp_async_tid=NULL;
 
+typedef struct transport_t {
+    char *name;
+    int (*init)(struct mp_handle_t *devicelist, void *transport);
+    int (*deinit)(void);
+    int (*destroy)(struct mp_handle_t *device);
+    int (*write)(struct mp_handle_t *device, uint8_t *src, uint8_t slen,
+                 uint8_t *dst, uint8_t dlen);
+} transport_t;
+
+struct transport_t transport_table[] = {
+    { .name = "usb",
+      .init = usb_transport_init,
+      .deinit = usb_transport_deinit,
+      .destroy = usb_transport_destroy,
+      .write = usb_transport_write,
+    },
+    { .name = NULL }
+};
+
 /* Forwards */
 void mp_set_debug(int value);
 int mp_recv_usb(struct mp_handle_t *d,int len, char *dest);
@@ -96,7 +117,6 @@ int mp_write_usb(struct mp_handle_t *d, int len, char *src);
 int mp_write_usb_with_response(struct mp_handle_t *d, int len, char *src, int dlen, char *dst);
 
 int mp_query_info(struct mp_handle_t *d);
-struct mp_handle_t *mp_create_handle(struct libusb_device *handle);
 void mp_release_handle(struct mp_handle_t *ph);
 void mp_destroy_handle(struct mp_handle_t *ph);
 int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *retval);
@@ -108,6 +128,12 @@ void mp_set_debug(int value) {
     debug_level(value);
 }
 
+
+char *mp_i2c_type(uint8_t id) {
+    if(id > I2C_UNKNOWN)
+        return i2c_type[I2C_UNKNOWN];
+    return i2c_type[id];
+}
 
 /*
  * polling callback for libusb
@@ -124,6 +150,7 @@ void *mp_async_proc(void *arg) {
     return NULL;
 }
 
+/* FIXME: abstract to driver */
 void mp_irq_callback(struct libusb_transfer *xfer) {
     int err;
     struct mp_handle_t *phandle;
@@ -203,143 +230,13 @@ int mp_async_callback(struct mp_handle_t *d, callback_function cb) {
 }
 
 /*
- * read specific number of bytes from device.
- */
-int mp_recv_usb(struct mp_handle_t *d, int len, char *dest) {
-    int r;
-    int index;
-
-    if(libusb_bulk_transfer(d->phandle, mp_endpoint_in,
-                            (unsigned char *)dest, len, &r, mp_timeout) != 0) {
-        ERROR("Error receiving data");
-        return FALSE;
-    }
-
-    DEBUG("read %i bytes", r);
-    for(index = 0; index < r; index++) {
-        DEBUG("0x%02x ",(unsigned char)dest[index]);
-    }
-
-    if (r!=len) {
-        ERROR("Expecting to read %d bytes -- read %d\n",len, r);
-        // FIXME:
-        //        fprintf(stderr,"%s",usb_strerror());
-        return FALSE;
-    }
-    return TRUE;
-}
-
-/*
- * write specific number of types to device.
- */
-int mp_write_usb(struct mp_handle_t *d, int len, char *src) {
-    int r;
-    int index;
-
-    if(libusb_bulk_transfer(d->phandle, mp_endpoint_out, (unsigned char *)src,
-                            len, &r, mp_timeout) != 0) {
-        DEBUG("Error writing data");
-        return FALSE;
-    }
-
-    DEBUG("wrote %d bytes",r);
-    for(index = 0; index < r; index++) {
-        DEBUG("0x%02x ",(unsigned char)src[index]);
-    }
-
-    if(r != len) {
-        ERROR("Wanted to write %d bytes -- wrote %d\n",len, r);
-        // FIXME:
-        //        fprintf(stderr,"%s",usb_strerror());
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-/**
- * because the avr vusb uses control transfers, there is a much stronger
- * format for the protocol.  Probably we should enforce the protocol on
- * both types of controllers, but it's too late now.  Instead, we'll
- * just wrap the packet in a control structure and call it a day.
- */
-int mp_write_vusb_with_response(struct mp_handle_t *d, int len, char *src, int dlen, char *dst) {
-    int cnt;
-    int index;
-
-    cnt = libusb_control_transfer(d->phandle,
-                                  LIBUSB_REQUEST_TYPE_VENDOR |
-                                  LIBUSB_RECIPIENT_DEVICE |
-                                  LIBUSB_ENDPOINT_OUT,
-                                  VENDOR_RQ_WRITE_BUFFER,
-                                  0, 0, (unsigned char *)src, len, 5000);
-    if(cnt < len) {
-        /* FIXME: better error */
-        ERROR("Error on outbound control transfer");
-        return FALSE;
-    }
-
-    if(dlen) {
-        cnt = libusb_control_transfer(d->phandle,
-                                      LIBUSB_REQUEST_TYPE_VENDOR |
-                                      LIBUSB_RECIPIENT_DEVICE |
-                                      LIBUSB_ENDPOINT_IN,
-                                      VENDOR_RQ_READ_BUFFER,
-                                      0, 0, (unsigned char *)dst, dlen, 5000);
-
-        if(cnt != dlen) {
-            /* FIXME: better error */
-            ERROR("Error on read buffer");
-            return FALSE;
-        }
-
-        DEBUG("read %i bytes", cnt);
-        for(index = 0; index < cnt; index++) {
-            DEBUG("0x%02x ",(unsigned char)dst[index]);
-        }
-    }
-
-    return TRUE;
-}
-
-
-
-/**
- * write to the device in a device specific manner,
- * returning a buffer of the size expected.
- *
- * @returns TRUE on success, with dst filled to
- * dlen, FALSE otherwise
- */
-int mp_write_usb_with_response(struct mp_handle_t *d, int len, char *src, int dlen,
-                               char *dst) {
-
-    switch(d->comm_protocol) {
-    case COMM_PROTOCOL_PIC:
-        if(mp_write_usb(d, len, src)) {
-            return mp_recv_usb(d, dlen, dst);
-        } else {
-            return FALSE;
-        }
-        break;
-    case COMM_PROTOCOL_VUSB:
-        return mp_write_vusb_with_response(d, len, src, dlen, dst);
-    default:
-        break;
-    }
-
-    return FALSE;
-}
-
-
-
-/*
  * read from i2c device
  */
 int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data) {
-    char *buf;
+    uint8_t *buf;
     int result = FALSE;
     int retval;
+    transport_t *ptransport = d->transport_info;
 
     if(d->board_id != BOARD_TYPE_I2C) {
         return FALSE;
@@ -359,7 +256,7 @@ int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, un
 
     DEBUG("executing mp_i2c_read: dev 0x%02x, addr 0x%02x, len 0x%02x", dev, addr, len);
 
-    if((result = mp_write_usb_with_response(d, 5, buf, len + 1, buf))) {
+    if((result = ptransport->write(d, buf, 5, buf, len + 1))) {
         retval = buf[0];
         memcpy(data, &buf[1],len);
         free(buf);
@@ -373,10 +270,11 @@ int mp_i2c_read(struct mp_handle_t *d, unsigned char dev, unsigned char addr, un
 /*
  * write to an i2c device
  */
-int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, unsigned char len, unsigned char *data) {
-    char *buf;
+int mp_i2c_write(struct mp_handle_t *d, uint8_t dev, uint8_t addr, uint8_t len, uint8_t *data) {
+    uint8_t *buf;
     int result = FALSE;
     int retval;
+    transport_t *ptransport = d->transport_info;
 
     if(d->board_id != BOARD_TYPE_I2C) {
         return FALSE;
@@ -397,7 +295,7 @@ int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, u
 
     DEBUG("executing mp_i2c_write: dev 0x%02x, addr 0x%02x, len 0x%02x", dev, addr, len);
 
-    if((result = mp_write_usb_with_response(d, len + 4, buf, 2, buf))) {
+    if((result = ptransport->write(d, buf, len + 4, buf, 2))) {
         retval=buf[0];
         data[0] = buf[1];
         free(buf);
@@ -412,9 +310,10 @@ int mp_i2c_write(struct mp_handle_t *d, unsigned char dev, unsigned char addr, u
 /*
  * read eeprom
  */
-int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *retval) {
-    char buf[3];
+int mp_read_eeprom(struct mp_handle_t *d, uint8_t addr, uint8_t *retval) {
+    uint8_t buf[3];
     int result;
+    transport_t *ptransport = d->transport_info;
 
     if(!d->has_eeprom)
         return FALSE;
@@ -425,7 +324,7 @@ int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *ret
 
     DEBUG("executing mp_read_eeprom: %d", addr);
 
-    if((result = mp_write_usb_with_response(d, 3, buf, 2, buf))) {
+    if((result = ptransport->write(d, buf, 3, buf, 2))) {
         *retval = buf[0];
         return result;
     }
@@ -436,8 +335,9 @@ int mp_read_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char *ret
 /*
  * write eeprom
  */
-int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char value) {
-    char buf[4];
+int mp_write_eeprom(struct mp_handle_t *d, uint8_t addr, uint8_t value) {
+    uint8_t buf[4];
+    transport_t *ptransport = d->transport_info;
 
     if(!d->has_eeprom)
         return FALSE;
@@ -449,7 +349,7 @@ int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char val
 
     DEBUG("executing mp_write_eeprom: addr %d -> %d", addr, value);
 
-    if(mp_write_usb_with_response(d, 4, buf, 4, buf)) {
+    if(ptransport->write(d, buf, 4, buf, 4)) {
         return (buf[0] != 0);
     }
 
@@ -460,8 +360,9 @@ int mp_write_eeprom(struct mp_handle_t *d, unsigned char addr, unsigned char val
 /*
  * set power for power board
  */
-int mp_power_set(struct mp_handle_t *d, int state) {
-    char buf[3];
+int mp_power_set(struct mp_handle_t *d, uint8_t state) {
+    uint8_t buf[3];
+    transport_t *ptransport = d->transport_info;
 
     buf[0] = 0x32;
     buf[1] = 0x1;
@@ -469,7 +370,7 @@ int mp_power_set(struct mp_handle_t *d, int state) {
 
     DEBUG("executing mp_power_set: %d",state);
 
-    return mp_write_usb_with_response(d, 3, buf, 1, buf);
+    return ptransport->write(d, buf, 3, buf, 1);
 }
 
 /**
@@ -488,19 +389,16 @@ int mp_i2c_default_max(int max) {
     return TRUE;
 }
 
-
 int mp_query_info(struct mp_handle_t *d) {
-    char buf[8];
+    uint8_t buf[8];
     int index;
     int result;
     struct mp_i2c_handle_t *pi2c;
+    transport_t *ptransport = d->transport_info;
 
-    // we'll assume we already have the space allocated, and
-    // phandle is already assigned
-
-    // First, get version info
+    DEBUG("Querying device %s on transport %s", d->device_path, ptransport->name);
     DEBUG("Getting version info");
-    if(!mp_write_usb_with_response(d, 2, "\0\0", 2, buf))
+    if(!ptransport->write(d, (uint8_t*)"\0\0", 2, buf, 2))
         return FALSE;
 
     d->fw_major = (int) buf[0];
@@ -508,7 +406,7 @@ int mp_query_info(struct mp_handle_t *d) {
 
     // Get board type info
     DEBUG("Getting board info");
-    if(!mp_write_usb_with_response(d, 2, "\x30\1", 4, buf))
+    if(!ptransport->write(d, (uint8_t *)"\x30\1", 2, buf, 4))
         return FALSE;
 
     d->board_id = (int) buf[0];
@@ -536,7 +434,7 @@ int mp_query_info(struct mp_handle_t *d) {
     DEBUG("Getting board specific info");
     switch(d->board_id) {
     case BOARD_TYPE_POWER:
-        if(!mp_write_usb_with_response(d, 2, "\x31\2", 2, buf))
+        if(!ptransport->write(d, (uint8_t *)"\x31\2", 2, buf, 2))
             return FALSE;
         d->power.current = buf[0];
         d->power.devices = buf[1];
@@ -559,9 +457,6 @@ int mp_query_info(struct mp_handle_t *d) {
                     /* see what kind... */
                     if((result = mp_i2c_read(d, index, 1, 1, (unsigned char *)&buf[0]))) {
                         pi2c->i2c_id = buf[0];
-                        pi2c->i2c_type = i2c_type[I2C_UNKNOWN];
-                        if(pi2c->i2c_id < I2C_UNKNOWN)
-                            pi2c->i2c_type = i2c_type[pi2c->i2c_id];
                     }
                 }
 
@@ -577,73 +472,10 @@ int mp_query_info(struct mp_handle_t *d) {
 }
 
 /*
- * create a new handle, given a usb device
- */
-struct mp_handle_t *mp_create_handle(struct libusb_device *device) {
-    struct mp_handle_t *pnew;
-    libusb_device_handle *phandle;
-    struct libusb_device_descriptor descriptor;
-
-    if(libusb_get_device_descriptor(device, &descriptor) != 0) {
-        /* FIXME: Proper error */
-        return NULL;
-    }
-
-    DEBUG("Checking device 0x%04x:0x%04x", descriptor.idVendor,
-                 descriptor.idProduct);
-
-    if(((descriptor.idVendor != mp_vendorID) ||
-       (descriptor.idProduct != mp_productID)) &&
-       ((descriptor.idVendor != mp_vusb_vendorID) ||
-        (descriptor.idProduct != mp_vusb_productID))) {
-        DEBUG("Not valid");
-        return NULL;
-    }
-
-    if(libusb_open(device, &phandle) != 0) {
-        DEBUG("Couldn't open device");
-        return NULL;
-    }
-
-    if(libusb_set_configuration(phandle, mp_configuration) != 0) {
-        DEBUG("Error in set_configuration");
-        libusb_close(phandle);
-        return NULL;
-    }
-
-    if (libusb_claim_interface(phandle, mp_interface) != 0) {
-        DEBUG("Error in claim_interface");
-        libusb_close(phandle);
-        return NULL;
-    }
-
-    pnew = (struct mp_handle_t *)malloc(sizeof(struct mp_handle_t));
-    if(!pnew) {
-        libusb_release_interface(phandle, mp_interface);
-        libusb_close(phandle);
-        return NULL;
-    }
-
-    if((descriptor.idVendor == mp_vendorID) &&
-       (descriptor.idProduct == mp_productID))
-        pnew->comm_protocol = COMM_PROTOCOL_PIC;
-    else
-        pnew->comm_protocol = COMM_PROTOCOL_VUSB;
-
-    pnew->phandle = phandle;
-    if(!mp_query_info(pnew)) {
-        DEBUG("Couldn't query info");
-        mp_destroy_handle(pnew);
-        return NULL;
-    }
-
-    return pnew;
-}
-
-/*
  * destroy a previously allocated mp handle
  */
 void mp_destroy_handle(struct mp_handle_t *ph) {
+
     libusb_reset_device(ph->phandle);
     libusb_release_interface(ph->phandle, mp_interface);
     libusb_close(ph->phandle);
@@ -696,7 +528,7 @@ int mp_list(void) {
             pi2c = pmp->i2c_list.pnext;
             while(pi2c) {
                 printf(" - I2C Device %02d: %s\n",
-                       pi2c->device, pi2c->mpusb ? pi2c->i2c_type :
+                       pi2c->device, pi2c->mpusb ? mp_i2c_type(pi2c->i2c_id) :
                        "Non-16F690 Device");
                 pi2c = pi2c->pnext;
             }
@@ -716,14 +548,7 @@ void mp_close(struct mp_handle_t *d) {
     mp_release_handle(d);
 }
 
-/* Find the first USB device with this vendor and product.
- *  Exits on errors, like if the device couldn't be found. -osl
- *
- * This function is heavily based upon Orion Sky Lawlor's
- *  usb_pickit program, which was a very useful reference
- *  for all the USB stuff.  Thanks!
- */
-struct mp_handle_t *mp_open(int type, int id) {
+struct mp_handle_t *mp_open(uint8_t type, uint8_t id) {
     struct mp_handle_t *pmp;
 
     pmp = devicelist.pnext;
@@ -753,74 +578,48 @@ struct mp_handle_t *mp_devicelist(void) {
 }
 
 int mp_init(void) {
-    struct mp_handle_t *pmp;
-    int err;
+    struct transport_t *current = transport_table;
+    struct mp_handle_t *pdevice;
 
     devicelist.pnext = NULL;
 
-#ifdef MUST_BE_ROOT
-    if (geteuid()!=0) {
-        ERROR("This program must be run as root.\n");
-        exit(1);
-    }
-#endif
-
-    //    printf("Locating Monkey Puppet Labs USB device (vendor 0x%04x/product 0x%04x)\n",
-    //           mp_vendorID,mp_productID);
-
-    /* (libusb setup code stolen from John Fremlin's cool "usb-robot") -osl */
-
-    DEBUG("Initializing libusb");
-
-    if((err = libusb_init(&mp_ctx))) {
-        /* FIXME: emit proper error */
-        fprintf(stderr,"Error initializing libusb: %s\n", libusb_error_name(err));
-        return FALSE;
+    while(current->name) {
+        DEBUG("Initializing transport %s", current->name);
+        current->init(&devicelist, current);
+        current++;
     }
 
-    libusb_set_debug(mp_ctx, 3);
-
-    DEBUG("Enumerating USB bus");
-
-    libusb_device **list;
-    ssize_t cnt = libusb_get_device_list(mp_ctx, &list);
-    ssize_t i = 0;
-
-    if(cnt < 0) {
-        DEBUG("No usb devices found");
-        return FALSE;
-    }
-
-    for(i = 0; i < cnt; i++) {
-        DEBUG("Checking device %d", i);
-
-        libusb_device *device = list[i];
-        pmp = mp_create_handle(device);
-        if(pmp) {
-            pmp->pnext = devicelist.pnext;
-            devicelist.pnext = pmp;
-            mp_release_handle(pmp);
+    pdevice=devicelist.pnext;
+    while(pdevice) {
+        if(!pdevice->queried) {
+            DEBUG("Forcing a query on device %s", pdevice->device_path);
+            mp_query_info(pdevice);
         }
+        pdevice = pdevice->pnext;
     }
 
-    DEBUG("Done");
-    libusb_free_device_list(list,1);
-    return TRUE;
+    return 0;
 }
 
 /**
  * release everything
  */
 void mp_deinit(void) {
-    struct mp_handle_t *pmp;
+    struct mp_handle_t *current, *next;
 
-    pmp = devicelist.pnext;
-
-    while(pmp) {
-        devicelist.pnext = pmp->pnext;
-        mp_destroy_handle(pmp);
-        pmp = devicelist.pnext;
+    /* walk through all the devices and close them */
+    current = devicelist.pnext;
+    while(current) {
+        next = current->pnext;
+        ((transport_t*)(current->transport_info))->destroy(current);
+        current = next;
     }
 
-    libusb_exit(mp_ctx);
+    struct transport_t *tcurrent = transport_table;
+
+    while(tcurrent->name) {
+        DEBUG("Deinitializing transport %s", tcurrent->name);
+        tcurrent->deinit();
+        tcurrent++;
+    }
 }
